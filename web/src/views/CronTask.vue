@@ -477,6 +477,41 @@
                   <el-checkbox label="info">Info</el-checkbox>
                 </el-checkbox-group>
               </el-form-item>
+              <el-form-item :label="$t('task.customHeaders')">
+                <el-radio-group v-model="form.pocscanHeaderMode" style="margin-bottom: 8px;">
+                  <el-radio label="none">{{ $t('task.noCustomHeader') }}</el-radio>
+                  <el-radio label="preset">{{ $t('task.presetUA') }}</el-radio>
+                  <el-radio label="custom">{{ $t('task.customInput') }}</el-radio>
+                </el-radio-group>
+                <template v-if="form.pocscanHeaderMode === 'preset'">
+                  <el-select v-model="form.pocscanPresetUA" :placeholder="$t('task.selectUA')" style="width: 100%;">
+                    <el-option-group :label="$t('task.uaDesktop')">
+                      <el-option label="Chrome (Windows)" value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" />
+                      <el-option label="Firefox (macOS)" value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0" />
+                      <el-option label="Edge (Windows)" value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0" />
+                    </el-option-group>
+                    <el-option-group :label="$t('task.uaMobile')">
+                      <el-option label="Safari (iPhone)" value="Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1" />
+                      <el-option label="Chrome (Android)" value="Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36" />
+                    </el-option-group>
+                    <el-option-group :label="$t('task.uaSpider')">
+                      <el-option label="Baiduspider" value="Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)" />
+                      <el-option label="Googlebot" value="Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" />
+                    </el-option-group>
+                    <el-option-group :label="$t('task.uaApp')">
+                      <el-option label="WeChat (Android)" value="Mozilla/5.0 (Linux; Android 13; ALN-AL00 Build/HUAWEIALN-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160065 MMWEBSDK/20231202 MicroMessenger/8.0.47.2560 WeChat/arm64 Weixin NetType/WIFI" />
+                    </el-option-group>
+                  </el-select>
+                </template>
+                <template v-if="form.pocscanHeaderMode === 'custom'">
+                  <el-input
+                    v-model="form.pocscanCustomHeadersText"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="$t('task.customHeadersPlaceholder')"
+                  />
+                </template>
+              </el-form-item>
             </template>
           </el-collapse-item>
 
@@ -880,6 +915,10 @@ const form = reactive({
   pocscanCustomPocIds: [],
   pocscanNucleiTemplates: [],
   pocscanCustomPocs: [],
+  // 自定义HTTP头部
+  pocscanHeaderMode: 'none',
+  pocscanPresetUA: '',
+  pocscanCustomHeadersText: '',
   // 目录扫描
   dirscanEnable: false,
   dirscanDictIds: [],
@@ -1780,6 +1819,33 @@ function handlePocModeChange(mode) {
 }
 
 // 构建扫描配置对象
+function parseCustomHeaders(headers) {
+  if (!headers || headers.length === 0) {
+    return { pocscanHeaderMode: 'none', pocscanPresetUA: '', pocscanCustomHeadersText: '' }
+  }
+  if (headers.length === 1 && headers[0].toLowerCase().startsWith('user-agent:')) {
+    const ua = headers[0].substring(headers[0].indexOf(':') + 1).trim()
+    return { pocscanHeaderMode: 'preset', pocscanPresetUA: ua, pocscanCustomHeadersText: '' }
+  }
+  return { pocscanHeaderMode: 'custom', pocscanPresetUA: '', pocscanCustomHeadersText: headers.join('\n') }
+}
+
+function buildCustomHeaders() {
+  const headers = []
+  if (form.pocscanHeaderMode === 'preset' && form.pocscanPresetUA) {
+    headers.push('User-Agent: ' + form.pocscanPresetUA)
+  } else if (form.pocscanHeaderMode === 'custom' && form.pocscanCustomHeadersText) {
+    const lines = form.pocscanCustomHeadersText.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed && trimmed.includes(':')) {
+        headers.push(trimmed)
+      }
+    }
+  }
+  return headers
+}
+
 function buildConfig() {
   return {
     batchSize: form.batchSize,
@@ -1848,7 +1914,8 @@ function buildConfig() {
       severity: form.pocscanSeverity,
       targetTimeout: form.pocscanTargetTimeout,
       nucleiTemplateIds: form.pocscanNucleiTemplateIds || [],
-      customPocIds: form.pocscanCustomPocIds || []
+      customPocIds: form.pocscanCustomPocIds || [],
+      customHeaders: buildCustomHeaders()
     },
     dirscan: {
       enable: form.dirscanEnable,
@@ -1945,6 +2012,11 @@ function applyConfig(config) {
     form.pocscanTargetTimeout = poc.targetTimeout ?? 600
     form.pocscanNucleiTemplateIds = poc.nucleiTemplateIds || []
     form.pocscanCustomPocIds = poc.customPocIds || []
+    // 恢复自定义HTTP头部
+    const headerState = parseCustomHeaders(poc.customHeaders)
+    form.pocscanHeaderMode = headerState.pocscanHeaderMode
+    form.pocscanPresetUA = headerState.pocscanPresetUA
+    form.pocscanCustomHeadersText = headerState.pocscanCustomHeadersText
     // 清空已选择的对象列表，后续可按需加载
     selectedNucleiTemplates.value = []
     selectedCustomPocs.value = []
@@ -2024,6 +2096,9 @@ function resetScanConfig() {
   form.pocscanTargetTimeout = 600
   form.pocscanNucleiTemplateIds = []
   form.pocscanCustomPocIds = []
+  form.pocscanHeaderMode = 'none'
+  form.pocscanPresetUA = ''
+  form.pocscanCustomHeadersText = ''
   selectedNucleiTemplates.value = []
   selectedCustomPocs.value = []
   // 目录扫描

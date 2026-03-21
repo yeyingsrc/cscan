@@ -2012,6 +2012,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 						CustomPocOnly:   config.PocScan.CustomPocOnly,
 						CustomTemplates: templates,
 						TagMappings:     config.PocScan.TagMappings,
+						CustomHeaders:   config.PocScan.CustomHeaders,
 						// 设置回调函数，发现漏洞时添加到缓冲区
 						OnVulnerabilityFound: func(vul *scanner.Vulnerability) {
 							vulCount++

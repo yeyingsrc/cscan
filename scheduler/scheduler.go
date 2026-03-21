@@ -561,6 +561,7 @@ type PocScanConfig struct {
 	CustomPocIds      []string            `json:"customPocIds"`      // 自定义POC ID列表（新）
 	TagMappings       map[string][]string `json:"tagMappings"`       // 应用名称到Nuclei标签的映射
 	ForceScan         bool                `json:"forceScan"`         // 强制扫描：无资产时直接使用目标进行POC扫描
+	CustomHeaders     []string            `json:"customHeaders"`     // 自定义HTTP头部，格式: "Header: Value"
 }
 
 // ParseTaskConfig 解析任务配置

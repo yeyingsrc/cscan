@@ -87,6 +87,7 @@ type NucleiOptions struct {
 	CustomTemplates      []string                 `json:"customTemplates"`  // 自定义模板内容(YAML)
 	CustomPocOnly        bool                     `json:"customPocOnly"`    // 只使用自定义POC
 	NucleiTemplates      []string                 `json:"nucleiTemplates"`  // 从数据库加载的Nuclei模板内容
+	CustomHeaders        []string                 `json:"customHeaders"`    // 自定义HTTP头部，格式: "Header: Value"
 	OnVulnerabilityFound func(vul *Vulnerability) `json:"-"`                // 发现漏洞时的回调函数
 }
 
@@ -620,6 +621,12 @@ func (s *NucleiScanner) buildNucleiOptions(opts *NucleiOptions, customTemplatePa
 	// 速率限制
 	if opts.RateLimit > 0 {
 		nucleiOpts = append(nucleiOpts, nuclei.WithGlobalRateLimit(opts.RateLimit, 1))
+	}
+
+	// 自定义HTTP头部
+	if len(opts.CustomHeaders) > 0 {
+		nucleiOpts = append(nucleiOpts, nuclei.WithHeaders(opts.CustomHeaders))
+		logx.Infof("Using %d custom headers", len(opts.CustomHeaders))
 	}
 
 	// 禁用更新检查

@@ -728,6 +728,7 @@ func (e *PocScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 		CustomPocOnly:   config.CustomPocOnly,
 		CustomTemplates: templates,
 		TagMappings:     config.TagMappings,
+		CustomHeaders:   config.CustomHeaders,
 		OnVulnerabilityFound: func(vul *scanner.Vulnerability) {
 			vulCount++
 			w.taskLog(taskIdForCallback, LevelInfo, "Vulnerability found: %s → %s", vul.PocFile, vul.Url)
