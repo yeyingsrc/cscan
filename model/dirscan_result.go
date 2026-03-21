@@ -25,6 +25,9 @@ type DirScanResult struct {
 	ContentType   string             `bson:"content_type" json:"contentType"`
 	Title         string             `bson:"title" json:"title"`
 	RedirectURL   string             `bson:"redirect_url" json:"redirectUrl"`
+	ContentWords  int64              `bson:"content_words" json:"contentWords"`
+	ContentLines  int64              `bson:"content_lines" json:"contentLines"`
+	Duration      int64              `bson:"duration" json:"duration"`
 	CreateTime    time.Time          `bson:"create_time" json:"createTime"`
 	ScanTime      time.Time          `bson:"scan_time,omitempty" json:"scanTime,omitempty"`       // New field for versioning
 	Version       int64              `bson:"version,omitempty" json:"version,omitempty"`          // New field for versioning
@@ -147,6 +150,9 @@ func (m *DirScanResultModel) Upsert(ctx context.Context, doc *DirScanResult) err
 			"content_type":   doc.ContentType,
 			"title":          doc.Title,
 			"redirect_url":   doc.RedirectURL,
+			"content_words":  doc.ContentWords,
+			"content_lines":  doc.ContentLines,
+			"duration":       doc.Duration,
 			"scan_time":      doc.ScanTime,
 			"version":        doc.Version,
 		},
@@ -184,6 +190,12 @@ func (m *DirScanResultModel) FindByFilterWithSort(ctx context.Context, filter bs
 		opts.SetSort(bson.D{{Key: "status_code", Value: sortValue}, {Key: "create_time", Value: -1}})
 	case "contentLength":
 		opts.SetSort(bson.D{{Key: "content_length", Value: sortValue}, {Key: "create_time", Value: -1}})
+	case "contentWords":
+		opts.SetSort(bson.D{{Key: "content_words", Value: sortValue}, {Key: "create_time", Value: -1}})
+	case "contentLines":
+		opts.SetSort(bson.D{{Key: "content_lines", Value: sortValue}, {Key: "create_time", Value: -1}})
+	case "duration":
+		opts.SetSort(bson.D{{Key: "duration", Value: sortValue}, {Key: "create_time", Value: -1}})
 	default:
 		opts.SetSort(bson.D{{Key: "create_time", Value: -1}})
 	}

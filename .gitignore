@@ -6,6 +6,5 @@ web/dist/
 output/
 .DS_Store
 screenshot/
-/CLAUDE.md
 .kiro/
 .env

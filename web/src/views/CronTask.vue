@@ -886,7 +886,6 @@ const form = reactive({
   dirscanDicts: [],
   dirscanThreads: 50,
   dirscanTimeout: 10,
-  dirscanStatusCodes: [200, 301, 302, 401, 403],
   dirscanFollowRedirect: false,
   dirscanForceScan: false,
   // 高级设置
@@ -1856,7 +1855,6 @@ function buildConfig() {
       dictIds: form.dirscanDictIds || [],
       threads: form.dirscanThreads,
       timeout: form.dirscanTimeout,
-      statusCodes: form.dirscanStatusCodes,
       followRedirect: form.dirscanFollowRedirect,
       forceScan: form.dirscanForceScan && !hasPrePhaseEnabled.value
     }
@@ -1959,7 +1957,6 @@ function applyConfig(config) {
     form.dirscanDictIds = dir.dictIds || []
     form.dirscanThreads = dir.threads ?? 50
     form.dirscanTimeout = dir.timeout ?? 10
-    form.dirscanStatusCodes = dir.statusCodes || [200, 301, 302, 401, 403]
     form.dirscanFollowRedirect = dir.followRedirect ?? false
   }
 }
@@ -2035,7 +2032,6 @@ function resetScanConfig() {
   form.dirscanDicts = []
   form.dirscanThreads = 50
   form.dirscanTimeout = 10
-  form.dirscanStatusCodes = [200, 301, 302, 401, 403]
   form.dirscanFollowRedirect = false
   // 高级设置
   form.batchSize = 50

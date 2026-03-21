@@ -95,6 +95,9 @@ type Asset struct {
 	Path          string `json:"path,omitempty"`          // 发现的路径
 	ContentLength int64  `json:"contentLength,omitempty"` // 响应内容长度
 	ContentType   string `json:"contentType,omitempty"`   // 响应内容类型
+	ContentWords  int64  `json:"contentWords,omitempty"`  // 响应单词数
+	ContentLines  int64  `json:"contentLines,omitempty"`  // 响应行数
+	Duration      int64  `json:"duration,omitempty"`      // 请求耗时(ms)
 	// 子域接管检测字段
 	TakeoverRisk    bool   `json:"takeoverRisk,omitempty"`    // 是否存在接管风险
 	TakeoverService string `json:"takeoverService,omitempty"` // 可接管的服务

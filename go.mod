@@ -23,6 +23,9 @@ require (
 	github.com/xuri/excelize/v2 v2.10.0
 	github.com/zeromicro/go-zero v1.7.3
 	go.mongodb.org/mongo-driver v1.17.4
+	go.opentelemetry.io/otel/trace v1.38.0
+	golang.org/x/crypto v0.47.0
+	golang.org/x/net v0.48.0
 	golang.org/x/text v0.33.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.8
@@ -56,6 +59,7 @@ require (
 	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/Ullaakut/nmap/v3 v3.0.6 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
+	github.com/adrg/xdg v0.4.0 // indirect
 	github.com/akrylysov/pogreb v0.10.2 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
@@ -150,6 +154,8 @@ require (
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/fgprof v0.9.5 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/ffuf/ffuf/v2 v2.1.0 // indirect
+	github.com/ffuf/pencode v0.0.0-20230421231718-2cea7e60a693 // indirect
 	github.com/free5gc/util v1.0.5-0.20230511064842-2e120956883b // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/gaissmai/bart v0.26.0 // indirect
@@ -288,6 +294,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/openrdap/rdap v0.9.1 // indirect
 	github.com/openzipkin/zipkin-go v0.4.3 // indirect
+	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
@@ -423,7 +430,6 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
-	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
@@ -431,10 +437,8 @@ require (
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	goftp.io/server/v2 v2.0.1 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
 	golang.org/x/mod v0.31.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect

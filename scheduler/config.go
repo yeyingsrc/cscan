@@ -227,9 +227,6 @@ func applyDirScanDefaults(c *DirScanConfig) {
 	if c.Timeout <= 0 {
 		c.Timeout = 10
 	}
-	if len(c.StatusCodes) == 0 {
-		c.StatusCodes = []int{200, 201, 301, 302, 307, 401, 403}
-	}
 }
 
 // ==================== 配置验证 ====================

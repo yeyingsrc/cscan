@@ -310,6 +310,9 @@ type WorkerDirScanResultDocument struct {
 	ContentType   string `json:"contentType"`
 	Title         string `json:"title"`
 	RedirectURL   string `json:"redirectUrl"`
+	ContentWords  int64  `json:"contentWords"`
+	ContentLines  int64  `json:"contentLines"`
+	Duration      int64  `json:"duration"`
 }
 
 // WorkerDirScanResultReq 目录扫描结果上报请求
@@ -389,6 +392,9 @@ func WorkerDirScanResultHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 				ContentType:   result.ContentType,
 				Title:         result.Title,
 				RedirectURL:   result.RedirectURL,
+				ContentWords:  result.ContentWords,
+				ContentLines:  result.ContentLines,
+				Duration:      result.Duration,
 			}
 
 			targetGroups[key] = append(targetGroups[key], doc)

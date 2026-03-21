@@ -1,6 +1,6 @@
-﻿<template>
+<template>
   <div class="dirscan-view">
-    <!-- 搜索区域 -->
+    <!-- 全局搜索区域 -->
     <el-card class="search-card">
       <el-form :model="searchForm" inline>
         <el-form-item :label="$t('dirscan.target')">
@@ -87,10 +87,47 @@
           <template #title>
             <div class="collapse-title">
               <span class="target-name">{{ authority }}</span>
-              <el-badge :value="items.length" :max="999" type="primary" style="margin-left: 10px" />
+              <el-badge :value="getFilteredItems(authority).length" :max="999" type="primary" style="margin-left: 10px" />
             </div>
           </template>
-          <el-table :data="items" stripe size="small" @sort-change="handleSortChange">
+          <!-- 目标内筛选栏 -->
+          <div class="target-filter-bar">
+            <el-input
+              v-model="getTargetFilter(authority).path"
+              :placeholder="$t('dirscan.filterByPath')"
+              size="small"
+              clearable
+              style="width: 180px; margin-right: 8px"
+            />
+            <el-select
+              v-model="getTargetFilter(authority).statusCode"
+              :placeholder="$t('dirscan.statusCode')"
+              size="small"
+              clearable
+              style="width: 100px; margin-right: 8px"
+            >
+              <el-option v-for="code in getTargetStatusCodes(authority)" :key="code" :label="code" :value="code" />
+            </el-select>
+            <el-input
+              v-model="getTargetFilter(authority).sizeMin"
+              :placeholder="$t('dirscan.sizeMin')"
+              size="small"
+              clearable
+              style="width: 100px; margin-right: 4px"
+              type="number"
+            />
+            <span class="filter-separator">-</span>
+            <el-input
+              v-model="getTargetFilter(authority).sizeMax"
+              :placeholder="$t('dirscan.sizeMax')"
+              size="small"
+              clearable
+              style="width: 100px; margin-right: 8px"
+              type="number"
+            />
+            <el-button size="small" @click="clearTargetFilter(authority)">{{ $t('common.reset') }}</el-button>
+          </div>
+          <el-table :data="getFilteredItems(authority)" stripe size="small" @sort-change="(e) => handleTargetSortChange(authority, e)">
             <el-table-column prop="url" label="URL" min-width="300" show-overflow-tooltip>
               <template #default="{ row }">
                 <a :href="row.url" target="_blank" rel="noopener" class="url-link">{{ row.url }}</a>
@@ -104,6 +141,15 @@
             </el-table-column>
             <el-table-column prop="contentLength" :label="$t('dirscan.size')" width="100" sortable="custom">
               <template #default="{ row }">{{ formatSize(row.contentLength) }}</template>
+            </el-table-column>
+            <el-table-column prop="contentWords" :label="$t('task.contentWords')" width="90" sortable="custom">
+              <template #default="{ row }">{{ row.contentWords || 0 }}</template>
+            </el-table-column>
+            <el-table-column prop="contentLines" :label="$t('task.contentLines')" width="80" sortable="custom">
+              <template #default="{ row }">{{ row.contentLines || 0 }}</template>
+            </el-table-column>
+            <el-table-column prop="duration" :label="$t('task.duration')" width="90" sortable="custom">
+              <template #default="{ row }">{{ row.duration ? row.duration + 'ms' : '-' }}</template>
             </el-table-column>
             <el-table-column prop="title" :label="$t('dirscan.title')" min-width="120" show-overflow-tooltip />
             <el-table-column prop="contentType" :label="$t('dirscan.contentType')" min-width="120" show-overflow-tooltip />
@@ -142,6 +188,80 @@ const sortForm = reactive({ sortField: '', sortOrder: '' })
 const stat = reactive({ total: 0, status_2xx: 0, status_3xx: 0, status_4xx: 0, status_5xx: 0 })
 const pagination = reactive({ page: 1, pageSize: 1000, total: 0 })
 
+// 每个目标的独立筛选/排序状态
+const targetFilters = reactive({})
+const targetSorts = reactive({})
+
+function getTargetFilter(authority) {
+  if (!targetFilters[authority]) {
+    targetFilters[authority] = { path: '', statusCode: null, sizeMin: '', sizeMax: '' }
+  }
+  return targetFilters[authority]
+}
+
+function clearTargetFilter(authority) {
+  targetFilters[authority] = { path: '', statusCode: null, sizeMin: '', sizeMax: '' }
+  delete targetSorts[authority]
+}
+
+// 获取目标下所有出现过的状态码（用于筛选下拉）
+function getTargetStatusCodes(authority) {
+  const items = groupedData.value[authority] || []
+  const codes = new Set()
+  for (const item of items) {
+    if (item.statusCode) codes.add(item.statusCode)
+  }
+  return Array.from(codes).sort()
+}
+
+// 获取经过目标内筛选和排序后的数据
+function getFilteredItems(authority) {
+  let items = groupedData.value[authority] || []
+  const filter = targetFilters[authority]
+
+  if (filter) {
+    if (filter.path) {
+      const lower = filter.path.toLowerCase()
+      items = items.filter(item => (item.path || '').toLowerCase().includes(lower))
+    }
+    if (filter.statusCode != null) {
+      items = items.filter(item => item.statusCode === filter.statusCode)
+    }
+    if (filter.sizeMin !== '' && filter.sizeMin != null) {
+      const min = Number(filter.sizeMin)
+      if (!isNaN(min)) items = items.filter(item => (item.contentLength || 0) >= min)
+    }
+    if (filter.sizeMax !== '' && filter.sizeMax != null) {
+      const max = Number(filter.sizeMax)
+      if (!isNaN(max)) items = items.filter(item => (item.contentLength || 0) <= max)
+    }
+  }
+
+  // 目标内排序
+  const sort = targetSorts[authority]
+  if (sort && sort.prop && sort.order) {
+    const prop = sort.prop
+    const asc = sort.order === 'ascending'
+    items = [...items].sort((a, b) => {
+      const va = a[prop] ?? 0
+      const vb = b[prop] ?? 0
+      if (va < vb) return asc ? -1 : 1
+      if (va > vb) return asc ? 1 : -1
+      return 0
+    })
+  }
+
+  return items
+}
+
+function handleTargetSortChange(authority, { prop, order }) {
+  if (order) {
+    targetSorts[authority] = { prop, order }
+  } else {
+    delete targetSorts[authority]
+  }
+}
+
 // 按目标分组数据
 const groupedData = computed(() => {
   const groups = {}
@@ -170,9 +290,9 @@ async function loadData() {
     if (searchForm.statusCode != null) params.statusCode = searchForm.statusCode
     if (sortForm.sortField) params.sortField = sortForm.sortField
     if (sortForm.sortOrder) params.sortOrder = sortForm.sortOrder
-    
+
     const res = await request.post('/dirscan/result/list', params)
-    if (res.code === 0) { 
+    if (res.code === 0) {
       tableData.value = res.list || []
       pagination.total = res.total || 0
       // 默认展开第一个目标
@@ -183,8 +303,8 @@ async function loadData() {
     }
   } catch (e) {
     console.error('[DirScan] loadData error:', e)
-  } finally { 
-    loading.value = false 
+  } finally {
+    loading.value = false
   }
 }
 
@@ -206,18 +326,6 @@ function handleReset() {
   Object.assign(searchForm, { authority: '', path: '', statusCode: null })
   Object.assign(sortForm, { sortField: '', sortOrder: '' })
   handleSearch()
-}
-
-// 处理排序变化
-function handleSortChange({ prop, order }) {
-  if (order) {
-    sortForm.sortField = prop
-    sortForm.sortOrder = order === 'ascending' ? 'asc' : 'desc'
-  } else {
-    sortForm.sortField = ''
-    sortForm.sortOrder = ''
-  }
-  loadData()
 }
 
 function expandAll() { activeNames.value = Object.keys(groupedData.value) }
@@ -256,18 +364,21 @@ async function handleExport(command) {
     ElMessage.warning(t('dirscan.noDataToExport'))
     return
   }
-  
+
   if (command === 'csv') {
-    // CSV导出所有字段
-    const headers = ['URL', 'Path', 'StatusCode', 'ContentLength', 'ContentType', 'Title', 'RedirectUrl', 'Host', 'Port', 'Authority', 'CreateTime']
+    // CSV导出所有字段（含新字段）
+    const headers = ['URL', 'Path', 'StatusCode', 'ContentLength', 'ContentWords', 'ContentLines', 'Duration(ms)', 'ContentType', 'Title', 'RedirectUrl', 'Host', 'Port', 'Authority', 'CreateTime']
     const csvRows = [headers.join(',')]
-    
+
     for (const row of tableData.value) {
       const values = [
         escapeCsvField(row.url || ''),
         escapeCsvField(row.path || ''),
         row.statusCode || '',
         row.contentLength || 0,
+        row.contentWords || 0,
+        row.contentLines || 0,
+        row.duration || 0,
         escapeCsvField(row.contentType || ''),
         escapeCsvField(row.title || ''),
         escapeCsvField(row.redirectUrl || ''),
@@ -278,7 +389,7 @@ async function handleExport(command) {
       ]
       csvRows.push(values.join(','))
     }
-    
+
     // 添加BOM以支持Excel正确识别UTF-8
     const BOM = '\uFEFF'
     const blob = new Blob([BOM + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' })
@@ -290,11 +401,11 @@ async function handleExport(command) {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    
+
     ElMessage.success(t('dirscan.exportSuccess', { count: tableData.value.length }))
     return
   }
-  
+
   // 原有的URL导出逻辑
   const seen = new Set()
   const exportData = []
@@ -304,12 +415,12 @@ async function handleExport(command) {
       exportData.push(row.url)
     }
   }
-  
+
   if (exportData.length === 0) {
     ElMessage.warning(t('dirscan.noDataToExport'))
     return
   }
-  
+
   const blob = new Blob([exportData.join('\n')], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -319,7 +430,7 @@ async function handleExport(command) {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
-  
+
   ElMessage.success(t('dirscan.exportSuccess', { count: exportData.length }))
 }
 
@@ -372,6 +483,17 @@ defineExpose({ refresh })
       }
     }
   }
+  .target-filter-bar {
+    display: flex;
+    align-items: center;
+    padding: 8px 0 12px 0;
+    flex-wrap: wrap;
+    gap: 4px;
+    .filter-separator {
+      color: var(--el-text-color-secondary);
+      margin: 0 2px;
+    }
+  }
   .url-link {
     color: var(--el-color-primary);
     text-decoration: none;
@@ -379,4 +501,3 @@ defineExpose({ refresh })
   }
 }
 </style>
-

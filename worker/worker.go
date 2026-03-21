@@ -412,6 +412,7 @@ func (w *Worker) registerScanners() {
 	w.scanners["fingerprint"] = scanner.NewFingerprintScanner()
 	w.scanners["nuclei"] = scanner.NewNucleiScanner()
 	w.scanners["urlfinder"] = scanner.NewURLFinderScanner()
+	w.scanners["ffuf"] = scanner.NewFFufScanner()
 }
 
 // Start 启动Worker
@@ -3790,10 +3791,10 @@ func (w *Worker) executeDirScan(ctx context.Context, task *scheduler.TaskInfo, a
 
 	w.taskLog(task.TaskId, LevelInfo, "Dir scan: total %d unique paths", len(allPaths))
 
-	// 获取扫描器
-	urlfinderScanner, ok := w.scanners["urlfinder"]
+	// 获取扫描器（优先使用 ffuf）
+	ffufScanner, ok := w.scanners["ffuf"]
 	if !ok {
-		w.taskLog(task.TaskId, LevelError, "Dir scan: urlfinder scanner not found")
+		w.taskLog(task.TaskId, LevelError, "Dir scan: ffuf scanner not found")
 		return nil
 	}
 
@@ -3806,18 +3807,23 @@ func (w *Worker) executeDirScan(ctx context.Context, task *scheduler.TaskInfo, a
 	if timeout <= 0 {
 		timeout = 10
 	}
-	statusCodes := config.StatusCodes
-	if len(statusCodes) == 0 {
-		statusCodes = []int{200, 201, 204, 301, 302, 307, 308, 401, 403, 405, 500}
-	}
 
-	opts := &scanner.URLFinderOptions{
-		Paths:          allPaths,
-		Threads:        threads,
-		Timeout:        timeout,
-		StatusCodes:    statusCodes,
-		Extensions:     config.Extensions,
-		FollowRedirect: config.FollowRedirect,
+	opts := &scanner.FFufOptions{
+		Paths:           allPaths,
+		Threads:         threads,
+		Timeout:         timeout,
+		Extensions:      config.Extensions,
+		FollowRedirect:  config.FollowRedirect,
+		AutoCalibration: config.AutoCalibration,
+		FilterSize:      config.FilterSize,
+		FilterWords:     config.FilterWords,
+		FilterLines:     config.FilterLines,
+		FilterRegex:     config.FilterRegex,
+		MatcherMode:     config.MatcherMode,
+		FilterMode:      config.FilterMode,
+		Rate:            config.Rate,
+		Recursion:       config.Recursion,
+		RecursionDepth:  config.RecursionDepth,
 	}
 
 	// 计算总超时时间
@@ -3842,7 +3848,7 @@ func (w *Worker) executeDirScan(ctx context.Context, task *scheduler.TaskInfo, a
 	}
 
 	// 执行扫描
-	result, err := urlfinderScanner.Scan(dirCtx, &scanner.ScanConfig{
+	result, err := ffufScanner.Scan(dirCtx, &scanner.ScanConfig{
 		Assets:      httpAssets,
 		Options:     opts,
 		WorkspaceId: task.WorkspaceId,
@@ -3927,6 +3933,9 @@ func (w *Worker) saveDirScanResults(ctx context.Context, task *scheduler.TaskInf
 			ContentLength: asset.ContentLength,
 			ContentType:   asset.ContentType,
 			Title:         asset.Title,
+			ContentWords:  asset.ContentWords,
+			ContentLines:  asset.ContentLines,
+			Duration:      asset.Duration,
 		})
 	}
 

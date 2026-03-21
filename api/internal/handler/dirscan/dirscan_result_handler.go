@@ -20,9 +20,11 @@ type DirScanResultListReq struct {
 	Authority  string `json:"authority"`
 	Path       string `json:"path"`
 	StatusCode int    `json:"statusCode"`
+	SizeMin    *int64 `json:"sizeMin"`    // 响应大小最小值
+	SizeMax    *int64 `json:"sizeMax"`    // 响应大小最大值
 	Page       int    `json:"page"`
 	PageSize   int    `json:"pageSize"`
-	SortField  string `json:"sortField"`  // 排序字段: statusCode, contentLength
+	SortField  string `json:"sortField"`  // 排序字段: statusCode, contentLength, contentWords, contentLines, duration
 	SortOrder  string `json:"sortOrder"`  // 排序方向: asc, desc
 }
 
@@ -71,6 +73,17 @@ func DirScanResultListHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		if req.StatusCode > 0 {
 			filter["status_code"] = req.StatusCode
+		}
+		// 大小范围筛选
+		if req.SizeMin != nil || req.SizeMax != nil {
+			sizeFilter := bson.M{}
+			if req.SizeMin != nil {
+				sizeFilter["$gte"] = *req.SizeMin
+			}
+			if req.SizeMax != nil {
+				sizeFilter["$lte"] = *req.SizeMax
+			}
+			filter["content_length"] = sizeFilter
 		}
 
 		// 先统计总数（不带分页）

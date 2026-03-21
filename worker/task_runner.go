@@ -39,7 +39,7 @@ var DefaultPhaseOrder = []PhaseConfig{
 	{Phase: PhasePortScan, Name: "端口扫描", Scanner: "naabu", ProgressStart: 20, ProgressEnd: 40, ContinueOnError: true},
 	{Phase: PhasePortIdentify, Name: "端口识别", Scanner: "nmap/fingerprintx", ProgressStart: 40, ProgressEnd: 50, ContinueOnError: true},
 	{Phase: PhaseFingerprint, Name: "指纹识别", Scanner: "fingerprint", ProgressStart: 50, ProgressEnd: 70, ContinueOnError: true},
-	{Phase: PhaseDirScan, Name: "目录扫描", Scanner: "urlfinder", ProgressStart: 70, ProgressEnd: 80, ContinueOnError: true},
+	{Phase: PhaseDirScan, Name: "目录扫描", Scanner: "ffuf", ProgressStart: 70, ProgressEnd: 80, ContinueOnError: true},
 	{Phase: PhasePocScan, Name: "漏洞扫描", Scanner: "nuclei", ProgressStart: 80, ProgressEnd: 100, ContinueOnError: true},
 }
 

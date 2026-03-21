@@ -396,21 +396,71 @@
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item :label="$t('task.validStatusCodes')">
-                <el-checkbox-group v-model="form.dirscanStatusCodes">
-                  <el-checkbox :label="200">200</el-checkbox>
-                  <el-checkbox :label="201">201</el-checkbox>
-                  <el-checkbox :label="204">204</el-checkbox>
-                  <el-checkbox :label="301">301</el-checkbox>
-                  <el-checkbox :label="302">302</el-checkbox>
-                  <el-checkbox :label="401">401</el-checkbox>
-                  <el-checkbox :label="403">403</el-checkbox>
-                  <el-checkbox :label="500">500</el-checkbox>
-                </el-checkbox-group>
-              </el-form-item>
               <el-form-item :label="$t('task.followRedirect')">
                 <el-switch v-model="form.dirscanFollowRedirect" />
               </el-form-item>
+              <!-- ffuf 高级配置 -->
+              <el-divider content-position="left">{{ $t('task.ffufAdvanced') }}</el-divider>
+              <el-form-item :label="$t('task.autoCalibration')">
+                <el-switch v-model="form.dirscanAutoCalibration" />
+                <span class="form-hint">{{ $t('task.autoCalibrationHint') }}</span>
+              </el-form-item>
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item :label="$t('task.rateLimit')">
+                    <el-input-number v-model="form.dirscanRate" :min="0" :max="10000" style="width:100%" />
+                    <span class="form-hint">{{ $t('task.rateLimitHint') }}</span>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item :label="$t('task.recursion')">
+                    <el-switch v-model="form.dirscanRecursion" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="20" v-if="form.dirscanRecursion">
+                <el-col :span="12">
+                  <el-form-item :label="$t('task.recursionDepth')">
+                    <el-input-number v-model="form.dirscanRecursionDepth" :min="1" :max="10" style="width:100%" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item :label="$t('task.filterMode')">
+                    <el-select v-model="form.dirscanFilterMode" style="width:100%">
+                      <el-option label="OR" value="or" />
+                      <el-option label="AND" value="and" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <!-- 过滤条件组 -->
+              <div class="filter-group">
+                <div class="filter-group-title">{{ $t('task.filterConditions') }}</div>
+                <el-row :gutter="20">
+                  <el-col :span="6">
+                    <el-form-item :label="$t('task.filterSize')">
+                      <el-input v-model="form.dirscanFilterSize" :placeholder="$t('task.filterSizeHint')" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item :label="$t('task.filterWords')">
+                      <el-input v-model="form.dirscanFilterWords" :placeholder="$t('task.filterWordsHint')" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item :label="$t('task.filterLines')">
+                      <el-input v-model="form.dirscanFilterLines" :placeholder="$t('task.filterLinesHint')" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item :label="$t('task.filterRegex')">
+                      <el-input v-model="form.dirscanFilterRegex" :placeholder="$t('task.filterRegexHint')" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+              </div>
             </template>
           </el-collapse-item>
 
@@ -985,9 +1035,19 @@ const form = reactive({
   dirscanDicts: [], // 保存已选择的字典信息
   dirscanThreads: 50,
   dirscanTimeout: 10,
-  dirscanStatusCodes: [200, 301, 302, 401, 403],
   dirscanFollowRedirect: false,
-  dirscanForceScan: false
+  dirscanForceScan: false,
+  // ffuf 高级配置
+  dirscanAutoCalibration: true,
+  dirscanFilterSize: '',
+  dirscanFilterWords: '',
+  dirscanFilterLines: '',
+  dirscanFilterRegex: '',
+  dirscanMatcherMode: 'or',
+  dirscanFilterMode: 'or',
+  dirscanRate: 0,
+  dirscanRecursion: false,
+  dirscanRecursionDepth: 2
 })
 
 // 判断是否有前序扫描阶段启用（用于控制强制扫描开关的显隐）
@@ -1173,7 +1233,6 @@ function applyConfig(config) {
     dirscanDictIds: config.dirscan?.dictIds || [],
     dirscanThreads: config.dirscan?.threads || 50,
     dirscanTimeout: config.dirscan?.timeout || 10,
-    dirscanStatusCodes: config.dirscan?.statusCodes || [200, 301, 302, 401, 403],
     dirscanFollowRedirect: config.dirscan?.followRedirect ?? false
   })
 }
@@ -1253,7 +1312,6 @@ watch(
     dirscanDictIds: form.dirscanDictIds,
     dirscanThreads: form.dirscanThreads,
     dirscanTimeout: form.dirscanTimeout,
-    dirscanStatusCodes: form.dirscanStatusCodes,
     dirscanFollowRedirect: form.dirscanFollowRedirect
   }),
   () => {
@@ -1330,9 +1388,18 @@ function buildConfig() {
       dictIds: form.dirscanDictIds,
       threads: form.dirscanThreads,
       timeout: form.dirscanTimeout,
-      statusCodes: form.dirscanStatusCodes,
       followRedirect: form.dirscanFollowRedirect,
-      forceScan: form.dirscanForceScan && !hasPrePhaseEnabled.value
+      forceScan: form.dirscanForceScan && !hasPrePhaseEnabled.value,
+      autoCalibration: form.dirscanAutoCalibration,
+      filterSize: form.dirscanFilterSize,
+      filterWords: form.dirscanFilterWords,
+      filterLines: form.dirscanFilterLines,
+      filterRegex: form.dirscanFilterRegex,
+      matcherMode: form.dirscanMatcherMode,
+      filterMode: form.dirscanFilterMode,
+      rate: form.dirscanRate,
+      recursion: form.dirscanRecursion,
+      recursionDepth: form.dirscanRecursionDepth
     }
   }
 
@@ -2162,6 +2229,21 @@ function confirmRecursiveDictSelection() {
     color: var(--el-text-color-secondary);
     font-size: 13px;
     margin-top: 10px;
+  }
+
+  .filter-group {
+    margin-top: 10px;
+    padding: 16px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+    background: var(--el-fill-color-lighter);
+  }
+
+  .filter-group-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--el-text-color-secondary);
+    margin-bottom: 12px;
   }
 }
 

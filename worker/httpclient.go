@@ -947,6 +947,9 @@ type DirScanResultDocument struct {
 	ContentType   string `json:"contentType"`
 	Title         string `json:"title"`
 	RedirectURL   string `json:"redirectUrl"`
+	ContentWords  int64  `json:"contentWords"`
+	ContentLines  int64  `json:"contentLines"`
+	Duration      int64  `json:"duration"`
 }
 
 // DirScanResultReq 目录扫描结果上报请求

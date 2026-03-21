@@ -452,10 +452,20 @@ type DirScanConfig struct {
 	DictIds        []string `json:"dictIds"`        // 字典ID列表
 	Threads        int      `json:"threads"`        // 并发线程数
 	Timeout        int      `json:"timeout"`        // 单个请求超时(秒)
-	StatusCodes    []int    `json:"statusCodes"`    // 有效状态码列表
 	Extensions     []string `json:"extensions"`     // 文件扩展名
 	FollowRedirect bool     `json:"followRedirect"` // 是否跟随重定向
 	ForceScan      bool     `json:"forceScan"`      // 强制扫描：无资产时直接使用目标
+	// ffuf 高级配置
+	AutoCalibration bool   `json:"autoCalibration"` // 自动校准（anti soft-404）
+	FilterSize      string `json:"filterSize"`      // 按响应大小过滤，逗号分隔
+	FilterWords     string `json:"filterWords"`     // 按单词数过滤
+	FilterLines     string `json:"filterLines"`     // 按行数过滤
+	FilterRegex     string `json:"filterRegex"`     // 按正则过滤
+	MatcherMode     string `json:"matcherMode"`     // 匹配模式 and/or
+	FilterMode      string `json:"filterMode"`      // 过滤模式 and/or
+	Rate            int    `json:"rate"`             // 每秒请求速率限制
+	Recursion       bool   `json:"recursion"`        // 递归扫描
+	RecursionDepth  int    `json:"recursionDepth"`   // 递归深度
 }
 
 type PortScanConfig struct {

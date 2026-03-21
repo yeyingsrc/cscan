@@ -332,9 +332,6 @@ func (v *ConfigValidator) applyDirScanDefaults(config *DirScanConfig) {
 	if config.Timeout == 0 {
 		config.Timeout = 10
 	}
-	if len(config.StatusCodes) == 0 {
-		config.StatusCodes = []int{200, 201, 301, 302, 307, 401, 403}
-	}
 }
 
 // ValidateAndApplyDefaults 验证配置并应用默认值
