@@ -321,6 +321,9 @@ func (s *NaabuScanner) scanSingleTargetWithLogger(ctx context.Context, target, p
 				}
 				assets = append(assets, asset)
 				foundPorts = append(foundPorts, fmt.Sprintf("%d", port.Port))
+
+				// 实时推送发现的存活端口作为有效原因，包含探测方式(SYN/CONNECT等)
+				logInfo("发现存活端口: %s:%d (通过 %s 探测)", host, port.Port, opts.ScanType)
 			}
 		},
 	}

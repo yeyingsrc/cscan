@@ -110,8 +110,10 @@ const totalCount = ref(0)
 const hasMore = ref(false)
 const loading = ref(false)
 const loadingMore = ref(false)
+const MAX_LOGS = 2000
 let pollingTimer = null
 let newestLogId = ''
+let fetchErrorCount = 0
 
 onMounted(() => {
   loadWorkerList()
@@ -145,6 +147,7 @@ async function loadWorkerList() {
 function startPolling() {
   if (pollingTimer) return
   isConnected.value = true
+  fetchErrorCount = 0
   pollingTimer = setInterval(fetchNewLogs, 2000)
 }
 
@@ -184,7 +187,11 @@ async function fetchInitialLogs() {
 
 // 获取新日志（增量更新）
 async function fetchNewLogs() {
-  if (!newestLogId) return
+  if (!newestLogId) {
+    // newestLogId 为空时重新尝试初始加载
+    await fetchInitialLogs()
+    return
+  }
   try {
     const res = await request.post('/worker/logs/history', {
       newerThan: newestLogId,
@@ -196,10 +203,19 @@ async function fetchNewLogs() {
       logs.value.push(...res.list)
       totalCount.value = res.total || totalCount.value
       newestLogId = res.list[res.list.length - 1].id
+      // 裁剪超出上限的旧日志
+      if (logs.value.length > MAX_LOGS) {
+        logs.value.splice(0, logs.value.length - MAX_LOGS)
+      }
     }
+    fetchErrorCount = 0
   } catch (e) {
     console.error('Fetch new logs error:', e)
-    isConnected.value = false
+    fetchErrorCount++
+    if (fetchErrorCount >= 3) {
+      stopPolling()
+      ElMessage.warning(t('worker.connectionLost'))
+    }
   }
 }
 

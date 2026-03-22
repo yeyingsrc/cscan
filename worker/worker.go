@@ -3591,6 +3591,16 @@ func (w *Worker) executePortIdentifyWithNmap(ctx context.Context, task *schedule
 	var identifiedAssets []*scanner.Asset
 	nmapScanner := w.scanners["nmap"]
 
+	// 预处理并发配置，只提示一次
+	concurrency := 1
+	if config.Concurrency > 0 {
+		concurrency = config.Concurrency
+		if concurrency > 5 {
+			w.taskLog(task.TaskId, LevelWarn, "Port identify concurrency %d exceeds maximum 5, limiting to 5", concurrency)
+			concurrency = 5
+		}
+	}
+
 	for host, ports := range hostPorts {
 		// 检查是否被停止或超时
 		if identifyCtx.Err() == context.DeadlineExceeded {
@@ -3618,15 +3628,7 @@ func (w *Worker) executePortIdentifyWithNmap(ctx context.Context, task *schedule
 		nmapOpts := &scanner.NmapOptions{
 			Ports:      portsStr,
 			Timeout:    timeout,
-			Concurrent: 1, // 默认串行扫描，避免过度并发
-		}
-		// 如果配置中指定了并发数，使用配置值（但限制最大值）
-		if config.Concurrency > 0 {
-			nmapOpts.Concurrent = config.Concurrency
-			if nmapOpts.Concurrent > 5 {
-				w.taskLog(task.TaskId, LevelWarn, "Port identify concurrency %d exceeds maximum 5, limiting to 5", nmapOpts.Concurrent)
-				nmapOpts.Concurrent = 5
-			}
+			Concurrent: concurrency,
 		}
 		if config.Args != "" {
 			nmapOpts.Args = config.Args
@@ -3635,6 +3637,9 @@ func (w *Worker) executePortIdentifyWithNmap(ctx context.Context, task *schedule
 		nmapResult, err := nmapScanner.Scan(identifyCtx, &scanner.ScanConfig{
 			Target:  host,
 			Options: nmapOpts,
+			TaskLogger: func(level, format string, args ...interface{}) {
+				w.taskLog(task.TaskId, level, format, args...)
+			},
 		})
 
 		// 检查是否被停止

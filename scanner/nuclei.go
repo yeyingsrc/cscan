@@ -319,9 +319,12 @@ func (s *NucleiScanner) executeNucleiScan(ctx, engineCtx context.Context, ne *nu
 				foundCount++
 				if taskLogger != nil {
 					if event.MatcherName != "" {
-						taskLogger("INFO", "  [%d] ✓ %s:%s [%s]", scannedCount, event.TemplateID, event.MatcherName, event.Info.SeverityHolder.Severity.String())
+						// 抽取并格式化有效原因详细信息
+						reason := s.extractMatchedReason(event)
+						taskLogger("INFO", "  [%d] ✓ %s:%s [%s] - 原因: %s", scannedCount, event.TemplateID, event.MatcherName, event.Info.SeverityHolder.Severity.String(), reason)
 					} else {
-						taskLogger("INFO", "  [%d] ✓ %s [%s]", scannedCount, event.TemplateID, event.Info.SeverityHolder.Severity.String())
+						reason := s.extractMatchedReason(event)
+						taskLogger("INFO", "  [%d] ✓ %s [%s] - 原因: %s", scannedCount, event.TemplateID, event.Info.SeverityHolder.Severity.String(), reason)
 					}
 				}
 				if vul := s.convertResult(event); vul != nil {
@@ -633,6 +636,27 @@ func (s *NucleiScanner) buildNucleiOptions(opts *NucleiOptions, customTemplatePa
 	nucleiOpts = append(nucleiOpts, nuclei.DisableUpdateCheck())
 
 	return nucleiOpts
+}
+
+func (s *NucleiScanner) extractMatchedReason(event *output.ResultEvent) string {
+	if event == nil {
+		return "无匹配信息"
+	}
+
+	var reason string
+	if len(event.ExtractedResults) > 0 {
+		reason = "提取到特征: " + strings.Join(event.ExtractedResults, ", ")
+	} else if len(event.MatcherName) > 0 {
+		reason = "规则命中: " + event.MatcherName
+	} else {
+		reason = "基于请求响应特征匹配模板"
+	}
+
+	if event.Matched != "" {
+		reason += fmt.Sprintf(" (触点: %s)", event.Matched)
+	}
+
+	return reason
 }
 
 // convertResult 转换Nuclei结果为漏洞对象

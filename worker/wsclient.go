@@ -161,7 +161,7 @@ func NewWorkerWSClient(config *WSClientConfig) *WorkerWSClient {
 	return &WorkerWSClient{
 		config:    config,
 		closeChan: make(chan struct{}),
-		sendChan:  make(chan []byte, 256),
+		sendChan:  make(chan []byte, 4096),
 		logBuffer: make([]WSLogPayload, 0, config.LogBatchSize),
 		lastPong:  time.Now(),
 	}

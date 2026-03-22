@@ -116,6 +116,26 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 		Concurrent: 1, // 默认每次扫描一个端口，降低扫描影响
 	}
 
+	// 日志函数，优先使用任务日志回调
+	logInfo := func(format string, args ...interface{}) {
+		if config.TaskLogger != nil {
+			config.TaskLogger("INFO", format, args...)
+		}
+		logx.Infof(format, args...)
+	}
+	logWarn := func(format string, args ...interface{}) {
+		if config.TaskLogger != nil {
+			config.TaskLogger("WARN", format, args...)
+		}
+		logx.Infof(format, args...)
+	}
+	logError := func(format string, args ...interface{}) {
+		if config.TaskLogger != nil {
+			config.TaskLogger("ERROR", format, args...)
+		}
+		logx.Errorf(format, args...)
+	}
+
 	// 尝试从不同类型的Options中提取配置
 	if config.Options != nil {
 		switch v := config.Options.(type) {
@@ -155,13 +175,13 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 		opts.Concurrent = 1
 	}
 	if opts.Concurrent > 5 {
-		logx.Infof("Nmap concurrent %d exceeds maximum 5, limiting to 5", opts.Concurrent)
+		logWarn("Nmap concurrent %d exceeds maximum 5, limiting to 5", opts.Concurrent)
 		opts.Concurrent = 5
 	}
 
 	// 检查nmap是否安装
 	if !checkNmapInstalled() {
-		logx.Error("nmap not installed, falling back to tcp scan")
+		logError("nmap not installed, falling back to tcp scan")
 		// 回退到TCP扫描
 		tcpScanner := NewPortScanner()
 		return tcpScanner.Scan(ctx, config)
@@ -174,7 +194,7 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 	}
 
 	// 执行nmap扫描
-	assets := s.runNmap(ctx, targets, opts, config.OnProgress)
+	assets := s.runNmapWithLogger(ctx, targets, opts, config.OnProgress, logInfo, logWarn, logError)
 
 	return &ScanResult{
 		WorkspaceId: config.WorkspaceId,
@@ -183,9 +203,9 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 	}, nil
 }
 
-// runNmap 运行nmap
+// runNmapWithLogger 运行nmap（带日志回调）
 // 优化为每个端口一个进程，通过并发控制降低扫描影响
-func (s *NmapScanner) runNmap(ctx context.Context, targets []string, opts *NmapOptions, onProgress func(int, string)) []*Asset {
+func (s *NmapScanner) runNmapWithLogger(ctx context.Context, targets []string, opts *NmapOptions, onProgress func(int, string), logInfo, logWarn, logError logFunc) []*Asset {
 	var assets []*Asset
 	var mu sync.Mutex
 
@@ -194,11 +214,11 @@ func (s *NmapScanner) runNmap(ctx context.Context, targets []string, opts *NmapO
 	totalPorts := len(ports)
 
 	if totalPorts == 0 {
-		logx.Info("No ports to scan")
+		logInfo("Nmap: no ports to scan")
 		return assets
 	}
 
-	logx.Infof("Starting nmap scan: %d ports, %d targets, concurrent=%d", totalPorts, len(targets), opts.Concurrent)
+	logInfo("Nmap: starting scan, %d ports, %d targets, concurrent=%d", totalPorts, len(targets), opts.Concurrent)
 
 	// 创建任务通道
 	type scanTask struct {
@@ -221,7 +241,7 @@ func (s *NmapScanner) runNmap(ctx context.Context, targets []string, opts *NmapO
 					return
 				default:
 					// 执行单端口扫描
-					result := s.scanSinglePort(ctx, targets, task.port, opts)
+					result := s.scanSinglePortWithLogger(ctx, targets, task.port, opts, logInfo, logError)
 					if len(result) > 0 {
 						mu.Lock()
 						assets = append(assets, result...)
@@ -252,12 +272,12 @@ func (s *NmapScanner) runNmap(ctx context.Context, targets []string, opts *NmapO
 	close(taskChan)
 	wg.Wait()
 
-	logx.Infof("Nmap scan completed: found %d open ports", len(assets))
+	logInfo("Nmap: scan completed, found %d open ports", len(assets))
 	return assets
 }
 
-// scanSinglePort 扫描单个端口
-func (s *NmapScanner) scanSinglePort(ctx context.Context, targets []string, port int, opts *NmapOptions) []*Asset {
+// scanSinglePortWithLogger 扫描单个端口（带日志回调）
+func (s *NmapScanner) scanSinglePortWithLogger(ctx context.Context, targets []string, port int, opts *NmapOptions, logInfo, logError logFunc) []*Asset {
 	var assets []*Asset
 
 	// 构建nmap命令
@@ -276,7 +296,7 @@ func (s *NmapScanner) scanSinglePort(ctx context.Context, targets []string, port
 	args = append(args, targets...)
 
 	// 输出执行命令到日志
-	logx.Infof("Executing command: nmap %s", strings.Join(args, " "))
+	logInfo("Nmap: executing nmap -Pn -p %d %s", port, strings.Join(targets, " "))
 
 	cmd := exec.CommandContext(ctx, "nmap", args...)
 	output, err := cmd.Output()
@@ -285,14 +305,14 @@ func (s *NmapScanner) scanSinglePort(ctx context.Context, targets []string, port
 		if ctx.Err() != nil {
 			return assets
 		}
-		logx.Errorf("nmap error for port %d: %v", port, err)
+		logError("Nmap: error for port %d: %v", port, err)
 		return assets
 	}
 
 	// 解析XML输出
 	var nmapRun NmapRun
 	if err := xml.Unmarshal(output, &nmapRun); err != nil {
-		logx.Errorf("nmap xml parse error for port %d: %v", port, err)
+		logError("Nmap: xml parse error for port %d: %v", port, err)
 		return assets
 	}
 
@@ -332,6 +352,10 @@ func (s *NmapScanner) scanSinglePort(ctx context.Context, targets []string, port
 						productInfo += ":" + nmapPort.Service.Version
 					}
 					asset.App = []string{productInfo}
+					// 输出详细服务指纹日志
+					logInfo("发现存活服务: %s:%d -> %s (产品: %s)", originalTarget, nmapPort.PortID, nmapPort.Service.Name, productInfo)
+				} else {
+					logInfo("发现存活服务: %s:%d -> %s", originalTarget, nmapPort.PortID, nmapPort.Service.Name)
 				}
 				assets = append(assets, asset)
 			}

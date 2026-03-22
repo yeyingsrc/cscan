@@ -40,7 +40,7 @@ type HttpxLibResult struct {
 }
 
 // RunHttpxLib 使用httpx库进行批量HTTP探测
-func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, opts *FingerprintOptions) error {
+func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, opts *FingerprintOptions, taskLog func(level, format string, args ...interface{})) error {
 	if len(assets) == 0 {
 		return nil
 	}
@@ -91,7 +91,11 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 
 			// 检查错误
 			if result.Err != nil {
-				logx.Debugf("httpx error for %s: %v", result.Input, result.Err)
+				if taskLog != nil {
+					taskLog("DEBUG", "httpx error for %s: %v", result.Input, result.Err)
+				} else {
+					logx.Debugf("httpx error for %s: %v", result.Input, result.Err)
+				}
 				return
 			}
 
@@ -128,7 +132,11 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 			}
 
 			if asset == nil {
-				logx.Debugf("httpx result not matched: input=%s, url=%s", result.Input, result.URL)
+				if taskLog != nil {
+					taskLog("DEBUG", "httpx result not matched: input=%s, url=%s", result.Input, result.URL)
+				} else {
+					logx.Debugf("httpx result not matched: input=%s, url=%s", result.Input, result.URL)
+				}
 				return
 			}
 
@@ -147,6 +155,11 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 			if len(result.Technologies) > 0 {
 				for _, tech := range result.Technologies {
 					asset.App = append(asset.App, tech+"[httpx]")
+					if taskLog != nil {
+						taskLog("INFO", "发现应用指纹: %s -> %s (来源: httpx)", key, tech)
+					} else {
+						logx.Infof("发现应用指纹: %s -> %s (来源: httpx)", key, tech)
+					}
 				}
 			}
 
@@ -188,8 +201,11 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 				asset.Screenshot = base64.StdEncoding.EncodeToString(result.ScreenshotBytes)
 			}
 
-			logx.Debugf("httpx lib matched: %s -> title=%s, status=%d, techs=%v",
-				key, result.Title, result.StatusCode, result.Technologies)
+			if taskLog != nil {
+				taskLog("DEBUG", "httpx lib matched: %s -> title=%s, status=%d, techs=%v", key, result.Title, result.StatusCode, result.Technologies)
+			} else {
+				logx.Debugf("httpx lib matched: %s -> title=%s, status=%d, techs=%v", key, result.Title, result.StatusCode, result.Technologies)
+			}
 		},
 	}
 
@@ -202,7 +218,11 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 	// 创建httpx runner
 	httpxRunner, err := runner.New(&httpxOpts)
 	if err != nil {
-		logx.Errorf("Failed to create httpx runner: %v", err)
+		if taskLog != nil {
+			taskLog("ERROR", "Failed to create httpx runner: %v", err)
+		} else {
+			logx.Errorf("Failed to create httpx runner: %v", err)
+		}
 		return err
 	}
 	defer httpxRunner.Close()
@@ -215,8 +235,12 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 }
 
 // runHttpxLib 使用httpx库进行批量探测（替代原有的runHttpx命令行方式）
-func (s *FingerprintScanner) runHttpxLib(ctx context.Context, assets []*Asset, opts *FingerprintOptions) {
-	if err := s.RunHttpxLib(ctx, assets, opts); err != nil {
-		logx.Errorf("httpx library scan failed: %v", err)
+func (s *FingerprintScanner) runHttpxLib(ctx context.Context, assets []*Asset, opts *FingerprintOptions, taskLog func(level, format string, args ...interface{})) {
+	if err := s.RunHttpxLib(ctx, assets, opts, taskLog); err != nil {
+		if taskLog != nil {
+			taskLog("ERROR", "httpx library scan failed: %v", err)
+		} else {
+			logx.Errorf("httpx library scan failed: %v", err)
+		}
 	}
 }

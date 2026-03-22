@@ -1603,7 +1603,7 @@
     "clear": "Clear",
     "autoRefreshing": "Auto Refreshing",
     "paused": "Paused",
-    "noMatchingLogs": "No matching logs",
+    "connectionLost": "Log connection lost, auto refresh stopped. Click to reconnect.",
     "noLogsYet": "No logs yet, Worker pushes logs to server via WebSocket",
     "exportLogs": "Export Logs",
     "exportJson": "Export JSON",
