@@ -1144,9 +1144,37 @@ html.dark .el-empty__description {
   color: hsl(var(--muted-foreground));
 }
 
+/* ============================================ */
+/* 现代毛玻璃效果 (Glassmorphism) */
+/* ============================================ */
+.el-overlay {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: backdrop-filter 0.3s ease;
+}
+
+html.dark .el-overlay {
+  background-color: rgba(0, 0, 0, 0.65) !important;
+}
+
+.el-drawer, .el-dialog {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+html.dark .el-drawer, html.dark .el-dialog {
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 /* 暗黑模式下的加载样式 */
 html.dark .el-loading-mask {
-  background-color: hsl(var(--background) / 0.9);
+  background-color: hsl(var(--background) / 0.75);
+  backdrop-filter: blur(4px);
 }
 
 /* ============================================ */
@@ -1195,16 +1223,40 @@ html.dark .workspace {
 }
 
 /* ============================================ */
-/* Element Plus 组件微调（仅补充官方暗黑模式未覆盖的部分） */
+/* Element Plus 组件微调 & 动画视效 (Phase 3) */
 /* ============================================ */
 
-/* 卡片圆角 */
+/* 卡片圆角及平滑交互 */
 .el-card {
   border-radius: 12px;
   background: hsl(var(--card));
   border-color: hsl(var(--border));
   color: hsl(var(--card-foreground));
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
 }
+
+.el-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+html.dark .el-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* 按钮微交互 */
+.el-button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.el-button:active {
+  transform: scale(0.96);
+}
+
+/* 表格行动画 */
+.el-table__row {
+  transition: background-color 0.2s ease;
+}
+
 
 /* 分页布局 */
 .el-pagination {
@@ -1327,7 +1379,7 @@ html.dark .dark-card {
 }
 
 /* ============================================ */
-/* 滚动条样式 */
+/* 滚动条样式优化 (Phase 3) */
 /* ============================================ */
 ::-webkit-scrollbar {
   width: 6px;
@@ -1335,16 +1387,25 @@ html.dark .dark-card {
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 3px;
+  background: rgba(144, 147, 153, 0.3);
+  border-radius: 4px;
+  transition: background 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: rgba(144, 147, 153, 0.5);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 161, 0.2);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 161, 0.4);
 }
 
 /* ============================================ */

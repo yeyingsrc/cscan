@@ -82,87 +82,112 @@
         </div>
       </div>
 
-      <el-collapse v-model="activeNames" class="target-collapse">
-        <el-collapse-item v-for="(items, authority) in groupedData" :key="authority" :name="authority">
-          <template #title>
-            <div class="collapse-title">
-              <span class="target-name">{{ authority }}</span>
-              <el-badge :value="getFilteredItems(authority).length" :max="999" type="primary" style="margin-left: 10px" />
+      <el-skeleton :loading="loading && Object.keys(groupedData).length === 0" animated :count="5">
+        <template #template>
+          <div style="padding: 10px 0; display: flex; flex-direction: column; gap: 15px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <el-skeleton-item variant="circle" style="width: 20px; height: 20px;" />
+              <el-skeleton-item variant="rect" style="width: 200px; height: 20px;" />
+              <el-skeleton-item variant="rect" style="width: 30px; height: 18px; border-radius: 10px" />
             </div>
-          </template>
-          <!-- 目标内筛选栏 -->
-          <div class="target-filter-bar">
-            <el-input
-              v-model="getTargetFilter(authority).path"
-              :placeholder="$t('dirscan.filterByPath')"
-              size="small"
-              clearable
-              style="width: 180px; margin-right: 8px"
-            />
-            <el-select
-              v-model="getTargetFilter(authority).statusCode"
-              :placeholder="$t('dirscan.statusCode')"
-              size="small"
-              clearable
-              style="width: 100px; margin-right: 8px"
-            >
-              <el-option v-for="code in getTargetStatusCodes(authority)" :key="code" :label="code" :value="code" />
-            </el-select>
-            <el-input
-              v-model="getTargetFilter(authority).sizeMin"
-              :placeholder="$t('dirscan.sizeMin')"
-              size="small"
-              clearable
-              style="width: 100px; margin-right: 4px"
-              type="number"
-            />
-            <span class="filter-separator">-</span>
-            <el-input
-              v-model="getTargetFilter(authority).sizeMax"
-              :placeholder="$t('dirscan.sizeMax')"
-              size="small"
-              clearable
-              style="width: 100px; margin-right: 8px"
-              type="number"
-            />
-            <el-button size="small" @click="clearTargetFilter(authority)">{{ $t('common.reset') }}</el-button>
+            <div style="display: flex; gap: 10px; align-items: center; padding-left: 20px;">
+              <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+              <el-skeleton-item variant="rect" style="width: 100px; height: 30px;" />
+              <el-skeleton-item variant="rect" style="width: 100px; height: 30px;" />
+              <el-skeleton-item variant="rect" style="width: 100px; height: 30px;" />
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; padding-left: 20px;">
+              <el-skeleton-item variant="rect" style="flex: 1; height: 40px;" />
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; padding-left: 20px;">
+              <el-skeleton-item variant="rect" style="flex: 1; height: 40px;" />
+            </div>
           </div>
-          <el-table :data="getFilteredItems(authority)" stripe size="small" @sort-change="(e) => handleTargetSortChange(authority, e)">
-            <el-table-column prop="url" label="URL" min-width="300" show-overflow-tooltip>
-              <template #default="{ row }">
-                <a :href="row.url" target="_blank" rel="noopener" class="url-link">{{ row.url }}</a>
+        </template>
+        <template #default>
+          <el-collapse v-model="activeNames" class="target-collapse">
+            <el-collapse-item v-for="(items, authority) in groupedData" :key="authority" :name="authority">
+              <template #title>
+                <div class="collapse-title">
+                  <span class="target-name">{{ authority }}</span>
+                  <el-badge :value="getFilteredItems(authority).length" :max="999" type="primary" style="margin-left: 10px" />
+                </div>
               </template>
-            </el-table-column>
-            <el-table-column prop="path" :label="$t('dirscan.path')" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="statusCode" :label="$t('dirscan.statusCode')" width="100" sortable="custom">
-              <template #default="{ row }">
-                <el-tag :type="getStatusType(row.statusCode)" size="small">{{ row.statusCode }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="contentLength" :label="$t('dirscan.size')" width="100" sortable="custom">
-              <template #default="{ row }">{{ formatSize(row.contentLength) }}</template>
-            </el-table-column>
-            <el-table-column prop="contentWords" :label="$t('task.contentWords')" width="90" sortable="custom">
-              <template #default="{ row }">{{ row.contentWords || 0 }}</template>
-            </el-table-column>
-            <el-table-column prop="contentLines" :label="$t('task.contentLines')" width="80" sortable="custom">
-              <template #default="{ row }">{{ row.contentLines || 0 }}</template>
-            </el-table-column>
-            <el-table-column prop="duration" :label="$t('task.duration')" width="90" sortable="custom">
-              <template #default="{ row }">{{ row.duration ? row.duration + 'ms' : '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="title" :label="$t('dirscan.title')" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="contentType" :label="$t('dirscan.contentType')" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="redirectUrl" :label="$t('dirscan.redirectUrl')" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="createTime" :label="$t('dirscan.discoveryTime')" width="150" />
-            <el-table-column :label="$t('common.operation')" width="80" fixed="right">
-              <template #default="{ row }">
-                <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-collapse-item>
-      </el-collapse>
+              <!-- 目标内筛选栏 -->
+              <div class="target-filter-bar">
+                <el-input
+                  v-model="getTargetFilter(authority).path"
+                  :placeholder="$t('dirscan.filterByPath')"
+                  size="small"
+                  clearable
+                  style="width: 180px; margin-right: 8px"
+                />
+                <el-select
+                  v-model="getTargetFilter(authority).statusCode"
+                  :placeholder="$t('dirscan.statusCode')"
+                  size="small"
+                  clearable
+                  style="width: 100px; margin-right: 8px"
+                >
+                  <el-option v-for="code in getTargetStatusCodes(authority)" :key="code" :label="code" :value="code" />
+                </el-select>
+                <el-input
+                  v-model="getTargetFilter(authority).sizeMin"
+                  :placeholder="$t('dirscan.sizeMin')"
+                  size="small"
+                  clearable
+                  style="width: 100px; margin-right: 4px"
+                  type="number"
+                />
+                <span class="filter-separator">-</span>
+                <el-input
+                  v-model="getTargetFilter(authority).sizeMax"
+                  :placeholder="$t('dirscan.sizeMax')"
+                  size="small"
+                  clearable
+                  style="width: 100px; margin-right: 8px"
+                  type="number"
+                />
+                <el-button size="small" @click="clearTargetFilter(authority)">{{ $t('common.reset') }}</el-button>
+              </div>
+              <el-table :data="getFilteredItems(authority)" stripe size="small" @sort-change="(e) => handleTargetSortChange(authority, e)">
+                <el-table-column prop="url" label="URL" min-width="300" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <a :href="row.url" target="_blank" rel="noopener" class="url-link">{{ row.url }}</a>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="path" :label="$t('dirscan.path')" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="statusCode" :label="$t('dirscan.statusCode')" width="100" sortable="custom">
+                  <template #default="{ row }">
+                    <el-tag :type="getStatusType(row.statusCode)" size="small">{{ row.statusCode }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="contentLength" :label="$t('dirscan.size')" width="100" sortable="custom">
+                  <template #default="{ row }">{{ formatSize(row.contentLength) }}</template>
+                </el-table-column>
+                <el-table-column prop="contentWords" :label="$t('task.contentWords')" width="90" sortable="custom">
+                  <template #default="{ row }">{{ row.contentWords || 0 }}</template>
+                </el-table-column>
+                <el-table-column prop="contentLines" :label="$t('task.contentLines')" width="80" sortable="custom">
+                  <template #default="{ row }">{{ row.contentLines || 0 }}</template>
+                </el-table-column>
+                <el-table-column prop="duration" :label="$t('task.duration')" width="90" sortable="custom">
+                  <template #default="{ row }">{{ row.duration ? row.duration + 'ms' : '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="title" :label="$t('dirscan.title')" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="contentType" :label="$t('dirscan.contentType')" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="redirectUrl" :label="$t('dirscan.redirectUrl')" min-width="150" show-overflow-tooltip />
+                <el-table-column prop="createTime" :label="$t('dirscan.discoveryTime')" width="150" />
+                <el-table-column :label="$t('common.operation')" width="80" fixed="right">
+                  <template #default="{ row }">
+                    <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+      </el-skeleton>
 
       <el-empty v-if="Object.keys(groupedData).length === 0 && !loading" :description="$t('common.noData')" />
     </el-card>

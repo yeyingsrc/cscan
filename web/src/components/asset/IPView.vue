@@ -80,7 +80,17 @@
         </div>
       </div>
       
-      <el-table :data="tableData" v-loading="loading" stripe max-height="500" @selection-change="handleSelectionChange">
+      <el-skeleton :loading="loading && tableData.length === 0" animated :count="10">
+        <template #template>
+          <div style="padding: 10px 0; display: flex; gap: 10px;">
+            <el-skeleton-item variant="rect" style="width: 30px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="flex: 1; height: 30px;" />
+          </div>
+        </template>
+        <template #default>
+          <el-table :data="tableData" v-loading="loading && tableData.length > 0" stripe max-height="600" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="40" />
         <el-table-column :label="$t('ip.ipAddress')" width="180">
           <template #default="{ row }">
@@ -125,6 +135,8 @@
           </template>
         </el-table-column>
       </el-table>
+        </template>
+      </el-skeleton>
 
       <el-pagination
         v-model:current-page="pagination.page"
@@ -138,8 +150,8 @@
       />
     </el-card>
 
-    <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" :title="$t('ip.ipDetail')" width="700px">
+    <!-- 详情侧边栏 -->
+    <el-drawer v-model="detailVisible" :title="$t('ip.ipDetail')" size="50%" direction="rtl">
       <el-descriptions v-if="currentIP" :column="2" border>
         <el-descriptions-item :label="$t('ip.ipAddress')">{{ currentIP.ip }}</el-descriptions-item>
         <el-descriptions-item :label="$t('ip.location')">{{ currentIP.location || '-' }}</el-descriptions-item>
@@ -157,12 +169,13 @@
           <span v-else>-</span>
         </el-descriptions-item>
       </el-descriptions>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -170,6 +183,8 @@ import request from '@/api/request'
 import { clearAsset } from '@/api/asset'
 
 const { t } = useI18n()
+const router = useRouter()
+const route = useRoute()
 const emit = defineEmits(['data-changed'])
 
 const loading = ref(false)
@@ -183,9 +198,37 @@ const searchForm = reactive({ ip: '', port: '', service: '', location: '', orgId
 const stat = reactive({ total: 0, portCount: 0, serviceCount: 0, newCount: 0 })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
+// 通过 URL Query 初始化搜索条件
+function initQueryFromUrl() {
+  const q = route.query
+  if (q.ip) searchForm.ip = q.ip
+  if (q.port) searchForm.port = q.port
+  if (q.service) searchForm.service = q.service
+  if (q.location) searchForm.location = q.location
+  if (q.orgId) searchForm.orgId = q.orgId
+  if (q.page) pagination.page = Number(q.page)
+  if (q.pageSize) pagination.pageSize = Number(q.pageSize)
+}
+
+// 同步状态到 URL Query
+function syncQueryToUrl() {
+  const query = { ...route.query }
+  // 清理或赋值
+  const fields = ['ip', 'port', 'service', 'location', 'orgId']
+  fields.forEach(f => {
+    if (searchForm[f]) query[f] = searchForm[f]
+    else delete query[f]
+  })
+  if (pagination.page > 1) query.page = pagination.page; else delete query.page
+  if (pagination.pageSize !== 20) query.pageSize = pagination.pageSize; else delete query.pageSize
+
+  router.replace({ query }).catch(() => {})
+}
+
 function handleWorkspaceChanged() { pagination.page = 1; loadData(); loadStat() }
 
 onMounted(() => {
+  initQueryFromUrl()
   loadData(); loadStat(); loadOrganizations()
   window.addEventListener('workspace-changed', handleWorkspaceChanged)
 })
@@ -193,6 +236,7 @@ onUnmounted(() => { window.removeEventListener('workspace-changed', handleWorksp
 
 async function loadData() {
   loading.value = true
+  syncQueryToUrl()
   try {
     const res = await request.post('/asset/ip/list', {
       page: pagination.page, pageSize: pagination.pageSize,

@@ -80,57 +80,69 @@
         </div>
       </div>
       
-      <el-table :data="tableData" v-loading="loading" stripe max-height="500" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="40" />
-        <el-table-column :label="$t('site.site')" min-width="280">
-          <template #default="{ row }">
-            <div class="site-cell">
-              <a :href="row.site" target="_blank" class="site-link">{{ row.site }}</a>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('site.title')" min-width="200" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.title || '-' }}</template>
-        </el-table-column>
-        <el-table-column :label="$t('site.statusCode')" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.httpStatus)" size="small">{{ row.httpStatus || '-' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('site.fingerprint')" min-width="180">
-          <template #default="{ row }">
-            <el-tag v-for="app in (row.app || []).slice(0, 3)" :key="app" size="small" type="success" style="margin: 2px">
-              {{ app }}
-            </el-tag>
-            <span v-if="(row.app || []).length > 3" class="more-apps">+{{ (row.app || []).length - 3 }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('site.screenshot')" width="100" align="center">
-          <template #default="{ row }">
-            <el-image 
-              v-if="row.screenshot" 
-              :src="getScreenshotUrl(row.screenshot)" 
-              :preview-src-list="[getScreenshotUrl(row.screenshot)]" 
-              :z-index="9999"
-              :preview-teleported="true"
-              :hide-on-click-modal="true"
-              fit="cover" 
-              class="screenshot-img" 
-            />
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
+      <el-skeleton :loading="loading && tableData.length === 0" animated :count="10">
+        <template #template>
+          <div style="padding: 10px 0; display: flex; gap: 10px;">
+            <el-skeleton-item variant="rect" style="width: 30px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 250px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="flex: 1; height: 30px;" />
+          </div>
+        </template>
+        <template #default>
+          <el-table :data="tableData" v-loading="loading && tableData.length > 0" stripe max-height="500" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="40" />
+            <el-table-column :label="$t('site.site')" min-width="280">
+              <template #default="{ row }">
+                <div class="site-cell">
+                  <a :href="row.site" target="_blank" class="site-link">{{ row.site }}</a>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('site.title')" min-width="200" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.title || '-' }}</template>
+            </el-table-column>
+            <el-table-column :label="$t('site.statusCode')" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.httpStatus)" size="small">{{ row.httpStatus || '-' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('site.fingerprint')" min-width="180">
+              <template #default="{ row }">
+                <el-tag v-for="app in (row.app || []).slice(0, 3)" :key="app" size="small" type="success" style="margin: 2px">
+                  {{ app }}
+                </el-tag>
+                <span v-if="(row.app || []).length > 3" class="more-apps">+{{ (row.app || []).length - 3 }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('site.screenshot')" width="100" align="center">
+              <template #default="{ row }">
+                <el-image
+                  v-if="row.screenshot"
+                  :src="getScreenshotUrl(row.screenshot)"
+                  :preview-src-list="[getScreenshotUrl(row.screenshot)]"
+                  :z-index="9999"
+                  :preview-teleported="true"
+                  :hide-on-click-modal="true"
+                  fit="cover"
+                  class="screenshot-img"
+                />
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
 
-        <el-table-column :label="$t('common.updateTime')" width="160">
-          <template #default="{ row }">{{ row.updateTime }}</template>
-        </el-table-column>
-        <el-table-column :label="$t('common.operation')" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+            <el-table-column :label="$t('common.updateTime')" width="160">
+              <template #default="{ row }">{{ row.updateTime }}</template>
+            </el-table-column>
+            <el-table-column :label="$t('common.operation')" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
+                <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </el-skeleton>
 
       <el-pagination
         v-model:current-page="pagination.page"
@@ -144,8 +156,8 @@
       />
     </el-card>
 
-    <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" :title="$t('site.siteDetail')" width="700px">
+    <!-- 详情侧边栏 -->
+    <el-drawer v-model="detailVisible" :title="$t('site.siteDetail')" size="50%" direction="rtl">
       <el-descriptions :column="2" border v-if="currentSite">
         <el-descriptions-item :label="$t('site.siteAddress')" :span="2">
           <a :href="currentSite.site" target="_blank" class="site-link">{{ currentSite.site }}</a>
@@ -166,8 +178,8 @@
           <span v-if="!(currentSite.app || []).length">-</span>
         </el-descriptions-item>
         <el-descriptions-item :label="$t('site.screenshot')" :span="2" v-if="currentSite.screenshot">
-          <el-image 
-            :src="getScreenshotUrl(currentSite.screenshot)" 
+          <el-image
+            :src="getScreenshotUrl(currentSite.screenshot)"
             :preview-src-list="[getScreenshotUrl(currentSite.screenshot)]"
             :z-index="9999"
             :preview-teleported="true"
@@ -180,12 +192,13 @@
       <template #footer>
         <el-button @click="detailVisible = false">{{ $t('common.close') }}</el-button>
       </template>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -193,6 +206,8 @@ import request from '@/api/request'
 import { clearAsset } from '@/api/asset'
 
 const { t } = useI18n()
+const router = useRouter()
+const route = useRoute()
 const emit = defineEmits(['data-changed'])
 
 const loading = ref(false)
@@ -206,9 +221,36 @@ const searchForm = reactive({ site: '', title: '', app: '', httpStatus: '', orgI
 const stat = reactive({ total: 0, httpCount: 0, httpsCount: 0, newCount: 0 })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
+// 通过 URL Query 初始化搜索条件
+function initQueryFromUrl() {
+  const q = route.query
+  if (q.site) searchForm.site = q.site
+  if (q.title) searchForm.title = q.title
+  if (q.app) searchForm.app = q.app
+  if (q.httpStatus) searchForm.httpStatus = q.httpStatus
+  if (q.orgId) searchForm.orgId = q.orgId
+  if (q.page) pagination.page = Number(q.page)
+  if (q.pageSize) pagination.pageSize = Number(q.pageSize)
+}
+
+// 同步状态到 URL Query
+function syncQueryToUrl() {
+  const query = { ...route.query }
+  const fields = ['site', 'title', 'app', 'httpStatus', 'orgId']
+  fields.forEach(f => {
+    if (searchForm[f]) query[f] = String(searchForm[f])
+    else delete query[f]
+  })
+  if (pagination.page > 1) query.page = String(pagination.page); else delete query.page
+  if (pagination.pageSize !== 20) query.pageSize = String(pagination.pageSize); else delete query.pageSize
+
+  router.replace({ query }).catch(() => {})
+}
+
 function handleWorkspaceChanged() { pagination.page = 1; loadData(); loadStat() }
 
 onMounted(() => {
+  initQueryFromUrl()
   loadData(); loadStat(); loadOrganizations()
   window.addEventListener('workspace-changed', handleWorkspaceChanged)
 })
@@ -216,6 +258,7 @@ onUnmounted(() => { window.removeEventListener('workspace-changed', handleWorksp
 
 async function loadData() {
   loading.value = true
+  syncQueryToUrl()
   try {
     const res = await request.post('/asset/site/list', {
       page: pagination.page, pageSize: pagination.pageSize,

@@ -39,51 +39,65 @@
           </el-select>
         </div>
       </div>
-      <el-table :data="tableData" v-loading="loading" stripe max-height="500" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" :label="$t('task.taskName')" min-width="150" />
-        <el-table-column prop="target" :label="$t('task.scanTarget')" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="status" :label="$t('task.status')" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status, row)">{{ getStatusText(row) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="progress" :label="$t('task.progress')" width="150">
-          <template #default="{ row }">
-            <div>
-              <el-progress :percentage="Math.min(row.progress || 0, 100)" :stroke-width="6" />
-              <div v-if="row.subTaskCount > 1" class="sub-task-info">
-                {{ $t('task.subTask') }}: {{ row.subTaskDone }}/{{ row.subTaskCount }}
-              </div>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" :label="$t('common.createTime')" width="160" />
-        <el-table-column prop="startTime" :label="$t('task.startTime')" width="160">
-          <template #default="{ row }">
-            {{ row.startTime || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="endTime" :label="$t('task.endTime')" width="160">
-          <template #default="{ row }">
-            {{ row.endTime || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('common.operation')" width="300" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="row.status === 'CREATED' || !row.status" type="success" link size="small" @click="handleStart(row)">{{ $t('task.start') }}</el-button>
-            <el-button v-if="row.status === 'CREATED' || !row.status" type="warning" link size="small" @click="goToEditTask(row)">{{ $t('task.edit') }}</el-button>
-            <el-button v-if="['STARTED', 'PENDING'].includes(row.status)" type="warning" link size="small" @click="handlePause(row)">{{ $t('task.pause') }}</el-button>
-            <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="handleResume(row)">{{ $t('task.resume') }}</el-button>
-            <el-button v-if="['STARTED', 'PAUSED', 'PENDING', 'CREATED', ''].includes(row.status) && row.status !== 'SUCCESS' && row.status !== 'FAILURE' && row.status !== 'STOPPED'" type="danger" link size="small" @click="handleStop(row)">{{ $t('task.stop') }}</el-button>
-            <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('task.detail') }}</el-button>
-            <el-button type="info" link size="small" @click="showLogs(row)">{{ $t('task.logs') }}</el-button>
-            <el-button type="info" link size="small" @click="viewReport(row)">{{ $t('task.report') }}</el-button>
-            <el-button v-if="['SUCCESS', 'FAILURE', 'STOPPED'].includes(row.status)" type="warning" link size="small" @click="handleRetry(row)">{{ $t('task.retry') }}</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('task.delete') }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-skeleton :loading="loading && tableData.length === 0" animated :count="10">
+        <template #template>
+          <div style="padding: 10px 0; display: flex; gap: 10px;">
+            <el-skeleton-item variant="rect" style="width: 30px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 250px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 100px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="flex: 1; height: 30px;" />
+          </div>
+        </template>
+        <template #default>
+          <el-table :data="tableData" v-loading="loading && tableData.length > 0" stripe max-height="500" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="50" />
+            <el-table-column prop="name" :label="$t('task.taskName')" min-width="150" />
+            <el-table-column prop="target" :label="$t('task.scanTarget')" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="status" :label="$t('task.status')" width="100">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.status, row)">{{ getStatusText(row) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="progress" :label="$t('task.progress')" width="150">
+              <template #default="{ row }">
+                <div>
+                  <el-progress :percentage="Math.min(row.progress || 0, 100)" :stroke-width="6" />
+                  <div v-if="row.subTaskCount > 1" class="sub-task-info">
+                    {{ $t('task.subTask') }}: {{ row.subTaskDone }}/{{ row.subTaskCount }}
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createTime" :label="$t('common.createTime')" width="160" />
+            <el-table-column prop="startTime" :label="$t('task.startTime')" width="160">
+              <template #default="{ row }">
+                {{ row.startTime || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="endTime" :label="$t('task.endTime')" width="160">
+              <template #default="{ row }">
+                {{ row.endTime || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('common.operation')" width="300" fixed="right">
+              <template #default="{ row }">
+                <el-button v-if="row.status === 'CREATED' || !row.status" type="success" link size="small" @click="handleStart(row)">{{ $t('task.start') }}</el-button>
+                <el-button v-if="row.status === 'CREATED' || !row.status" type="warning" link size="small" @click="goToEditTask(row)">{{ $t('task.edit') }}</el-button>
+                <el-button v-if="['STARTED', 'PENDING'].includes(row.status)" type="warning" link size="small" @click="handlePause(row)">{{ $t('task.pause') }}</el-button>
+                <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="handleResume(row)">{{ $t('task.resume') }}</el-button>
+                <el-button v-if="['STARTED', 'PAUSED', 'PENDING', 'CREATED', ''].includes(row.status) && row.status !== 'SUCCESS' && row.status !== 'FAILURE' && row.status !== 'STOPPED'" type="danger" link size="small" @click="handleStop(row)">{{ $t('task.stop') }}</el-button>
+                <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('task.detail') }}</el-button>
+                <el-button type="info" link size="small" @click="showLogs(row)">{{ $t('task.logs') }}</el-button>
+                <el-button type="info" link size="small" @click="viewReport(row)">{{ $t('task.report') }}</el-button>
+                <el-button v-if="['SUCCESS', 'FAILURE', 'STOPPED'].includes(row.status)" type="warning" link size="small" @click="handleRetry(row)">{{ $t('task.retry') }}</el-button>
+                <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('task.delete') }}</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </el-skeleton>
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.pageSize"
@@ -96,8 +110,8 @@
       />
     </el-card>
 
-    <!-- 任务详情对话框 - 现代化设计 -->
-    <el-dialog v-model="detailVisible" :title="$t('task.taskDetail')" width="900px" class="task-detail-dialog" destroy-on-close>
+    <!-- 任务详情侧边栏 - 现代化设计 -->
+    <el-drawer v-model="detailVisible" :title="$t('task.taskDetail')" size="50%" class="task-detail-dialog" destroy-on-close direction="rtl">
       <!-- 顶部任务概览卡片 -->
       <div class="detail-header">
         <div class="detail-header-main">
@@ -582,7 +596,7 @@
           </el-collapse-item>
         </el-collapse>
       </div>
-    </el-dialog>
+    </el-drawer>
 
     <!-- 新建/编辑任务对话框 - Tab页布局 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? $t('task.editTask') : $t('task.newTask')" width="720px" top="5vh" class="task-dialog">

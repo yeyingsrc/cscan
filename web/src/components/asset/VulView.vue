@@ -95,25 +95,38 @@
           </el-dropdown>
         </div>
       </div>
-      <el-table :data="tableData" v-loading="loading" stripe max-height="500" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" />
-        <el-table-column prop="authority" :label="$t('vul.target')" min-width="150" />
-        <el-table-column prop="url" label="URL" min-width="250" show-overflow-tooltip />
-        <el-table-column prop="pocFile" label="POC" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="severity" :label="$t('vul.severity')" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getSeverityType(row.severity)" size="small">{{ getSeverityLabel(row.severity) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="source" :label="$t('vul.source')" width="100" />
-        <el-table-column prop="createTime" :label="$t('vul.discoveryTime')" width="160" />
-        <el-table-column :label="$t('common.operation')" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-skeleton :loading="loading && tableData.length === 0" animated :count="10">
+        <template #template>
+          <div style="padding: 10px 0; display: flex; gap: 10px;">
+            <el-skeleton-item variant="rect" style="width: 30px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 250px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="width: 200px; height: 30px;" />
+            <el-skeleton-item variant="rect" style="flex: 1; height: 30px;" />
+          </div>
+        </template>
+        <template #default>
+          <el-table :data="tableData" v-loading="loading && tableData.length > 0" stripe max-height="500" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="50" />
+            <el-table-column prop="authority" :label="$t('vul.target')" min-width="150" />
+            <el-table-column prop="url" label="URL" min-width="250" show-overflow-tooltip />
+            <el-table-column prop="pocFile" label="POC" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="severity" :label="$t('vul.severity')" width="100">
+              <template #default="{ row }">
+                <el-tag :type="getSeverityType(row.severity)" size="small">{{ getSeverityLabel(row.severity) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="source" :label="$t('vul.source')" width="100" />
+            <el-table-column prop="createTime" :label="$t('vul.discoveryTime')" width="160" />
+            <el-table-column :label="$t('common.operation')" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
+                <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </el-skeleton>
 
       <el-pagination
         v-model:current-page="pagination.page"
@@ -127,8 +140,8 @@
       />
     </el-card>
 
-    <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" :title="$t('vul.vulDetail')" width="800px">
+    <!-- 详情侧边栏 -->
+    <el-drawer v-model="detailVisible" :title="$t('vul.vulDetail')" size="50%" direction="rtl">
       <el-descriptions :column="2" border>
         <el-descriptions-item :label="$t('vul.target')">{{ currentVul.authority }}</el-descriptions-item>
         <el-descriptions-item :label="$t('vul.severity')">
@@ -156,7 +169,7 @@
           </el-descriptions-item>
         </el-descriptions>
       </template>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 

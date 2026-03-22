@@ -184,8 +184,12 @@
       </el-header>
 
       <!-- 主内容区 -->
-      <el-main class="main">
-        <router-view />
+      <el-main class="main" v-loading.fullscreen.lock="isSwitchingWorkspace" :element-loading-text="$t('common.switchingWorkspace', '正在切换工作空间...')">
+        <router-view v-slot="{ Component }">
+          <transition name="fade-transform" mode="out-in">
+            <component :is="Component" :key="workspaceStore.currentWorkspaceId + $route.fullPath" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -212,10 +216,18 @@ onMounted(() => {
   workspaceStore.loadWorkspaces()
 })
 
+const isSwitchingWorkspace = ref(false)
+
 function handleWorkspaceChange(val) {
+  isSwitchingWorkspace.value = true
   workspaceStore.setCurrentWorkspace(val)
   // 触发页面刷新数据
   window.dispatchEvent(new CustomEvent('workspace-changed', { detail: val }))
+
+  // 给点延迟让数据和动画能展示出来
+  setTimeout(() => {
+    isSwitchingWorkspace.value = false
+  }, 400)
 }
 
 function handleCommand(command) {
@@ -516,13 +528,29 @@ function handleCommand(command) {
   max-width: 1500px;
   width: 1500px;
   margin: 0 auto;
-  
+
   /* 隐藏滚动条 */
   &::-webkit-scrollbar {
     display: none;
   }
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* fade-transform 动画 */
+.fade-transform-leave-active,
+.fade-transform-enter-active {
+  transition: all 0.3s cubic-bezier(0.55, 0, 0.1, 1);
+}
+
+.fade-transform-enter-from {
+  opacity: 0;
+  transform: translateX(-15px);
+}
+
+.fade-transform-leave-to {
+  opacity: 0;
+  transform: translateX(15px);
 }
 
 // 收起状态下logo图标居中
