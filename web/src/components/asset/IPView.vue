@@ -1,161 +1,66 @@
-﻿<template>
+<template>
   <div class="ip-view">
-    <!-- 搜索区域 -->
-    <el-card class="search-card">
-      <el-form :inline="true" class="search-form">
-        <el-form-item label="IP">
-          <el-input v-model="searchForm.ip" :placeholder="$t('ip.ipAddress')" clearable @keyup.enter="handleSearch" />
-        </el-form-item>
-        <el-form-item :label="$t('ip.port')">
-          <el-input v-model="searchForm.port" :placeholder="$t('ip.port')" clearable @keyup.enter="handleSearch" />
-        </el-form-item>
-        <el-form-item :label="$t('ip.service')">
-          <el-input v-model="searchForm.service" :placeholder="$t('ip.serviceType')" clearable @keyup.enter="handleSearch" />
-        </el-form-item>
-        <el-form-item :label="$t('ip.location')">
-          <el-input v-model="searchForm.location" :placeholder="$t('ip.location')" clearable @keyup.enter="handleSearch" />
-        </el-form-item>
-        <el-form-item :label="$t('ip.organization')">
-          <el-select v-model="searchForm.orgId" :placeholder="$t('common.allOrganizations')" clearable style="width: 140px">
-            <el-option :label="$t('common.allOrganizations')" value="" />
-            <el-option v-for="org in organizations" :key="org.id" :label="org.name" :value="org.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">{{ $t('common.search') }}</el-button>
-          <el-button @click="handleReset">{{ $t('common.reset') }}</el-button>
-          <el-button type="danger" plain @click="handleClear">{{ $t('asset.clearData') }}</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ProTable
+      ref="proTableRef"
+      api="/asset/ip/list"
+      statApi="/asset/ip/stat"
+      batchDeleteApi="/asset/ip/batchDelete"
+      exportApi="/asset/ip/list"
+      rowKey="ip"
+      :columns="ipColumns"
+      :searchItems="ipSearchItems"
+      :statLabels="statLabels"
+      selection
+      @data-changed="$emit('data-changed')"
+    >
+      <template #toolbar-right>
+        <el-button type="danger" plain @click="handleClear">{{ $t('asset.clearData') }}</el-button>
+      </template>
 
-    <!-- 统计信息 -->
-    <el-row :gutter="16" class="stat-row">
-      <el-col :span="6">
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stat.total }}</div>
-          <div class="stat-label">{{ $t('ip.totalIPs') }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stat.portCount }}</div>
-          <div class="stat-label">{{ $t('ip.openPorts') }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stat.serviceCount }}</div>
-          <div class="stat-label">{{ $t('ip.serviceTypes') }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stat.newCount }}</div>
-          <div class="stat-label">{{ $t('ip.newIPs') }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 数据表格 -->
-    <el-card class="table-card">
-      <div class="table-header">
-          <span class="total-info">{{ $t('ip.totalIPsCount', { count: pagination.total }) }}</span>
-        <div class="table-actions">
-          <el-button type="danger" size="small" :disabled="selectedRows.length === 0" @click="handleBatchDelete">
-            {{ $t('common.batchDelete') }} ({{ selectedRows.length }})
-          </el-button>
-          <el-dropdown style="margin-left: 10px" @command="handleExport">
-            <el-button type="success" size="small">
-              {{ $t('common.export') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="selected-ip" :disabled="selectedRows.length === 0">{{ $t('ip.exportSelectedIP', { count: selectedRows.length }) }}</el-dropdown-item>
-                <el-dropdown-item divided command="all-ip">{{ $t('ip.exportAllIP') }}</el-dropdown-item>
-                <el-dropdown-item command="csv">{{ $t('common.exportCsv') }}</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+      <template #ip="{ row }">
+        <div class="ip-cell">
+          <span class="ip-text">{{ row.ip }}</span>
+          <el-tag v-if="row.isNew" type="success" size="small" effect="dark" class="new-tag">{{ $t('common.new') }}</el-tag>
         </div>
-      </div>
-      
-      <el-skeleton :loading="loading && tableData.length === 0" animated :count="10">
-        <template #template>
-          <div style="padding: 10px 0; display: flex; gap: 10px;">
-            <el-skeleton-item variant="rect" style="width: 30px; height: 30px;" />
-            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
-            <el-skeleton-item variant="rect" style="width: 150px; height: 30px;" />
-            <el-skeleton-item variant="rect" style="flex: 1; height: 30px;" />
-          </div>
-        </template>
-        <template #default>
-          <el-table :data="tableData" v-loading="loading && tableData.length > 0" stripe max-height="600" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="40" />
-        <el-table-column :label="$t('ip.ipAddress')" width="180">
-          <template #default="{ row }">
-            <div class="ip-cell">
-              <span class="ip-text">{{ row.ip }}</span>
-              <el-tag v-if="row.isNew" type="success" size="small" effect="dark" class="new-tag">{{ $t('common.new') }}</el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('ip.location')" width="200">
-          <template #default="{ row }">{{ row.location || '-' }}</template>
-        </el-table-column>
-        <el-table-column :label="$t('ip.openPorts')" min-width="300">
-          <template #default="{ row }">
-            <div class="port-list">
-              <el-tag v-for="port in (row.ports || []).slice(0, 10)" :key="port.port" size="small" :type="getPortType(port.service)" class="port-tag">
-                {{ port.port }}<span v-if="port.service">/{{ port.service }}</span>
-              </el-tag>
-              <span v-if="(row.ports || []).length > 10" class="more-ports">+{{ (row.ports || []).length - 10 }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('ip.relatedDomains')" min-width="200">
-          <template #default="{ row }">
-            <div v-if="row.domains && row.domains.length > 0" class="domain-list">
-              <div v-for="domain in row.domains.slice(0, 5)" :key="domain" class="domain-item">{{ domain }}</div>
-              <div v-if="row.domains.length > 5" class="more-domains">+{{ row.domains.length - 5 }} {{ $t('common.more') }}...</div>
-            </div>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('ip.organization')" width="120">
-          <template #default="{ row }">{{ row.orgName || $t('common.defaultOrganization') }}</template>
-        </el-table-column>
-        <el-table-column :label="$t('common.updateTime')" width="160">
-          <template #default="{ row }">{{ row.updateTime }}</template>
-        </el-table-column>
-        <el-table-column :label="$t('common.operation')" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-        </template>
-      </el-skeleton>
+      </template>
 
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        :page-sizes="[20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        class="pagination"
-        @size-change="loadData"
-        @current-change="loadData"
-      />
-    </el-card>
+      <template #location="{ row }">
+        {{ row.location || '-' }}
+      </template>
+
+      <template #ports="{ row }">
+        <div class="port-list">
+          <el-tag v-for="port in (row.ports || []).slice(0, 10)" :key="port.port" size="small" :type="getPortType(port.service)" class="port-tag">
+            {{ port.port }}<span v-if="port.service">/{{ port.service }}</span>
+          </el-tag>
+          <span v-if="(row.ports || []).length > 10" class="more-ports">+{{ (row.ports || []).length - 10 }}</span>
+        </div>
+      </template>
+
+      <template #domains="{ row }">
+        <div v-if="row.domains && row.domains.length > 0" class="domain-list">
+          <div v-for="domain in row.domains.slice(0, 5)" :key="domain" class="domain-item">{{ domain }}</div>
+          <div v-if="row.domains.length > 5" class="more-domains">+{{ row.domains.length - 5 }} {{ $t('common.more') }}...</div>
+        </div>
+        <span v-else>-</span>
+      </template>
+
+      <template #org="{ row }">
+        {{ row.orgName || $t('common.defaultOrganization') }}
+      </template>
+
+      <template #operation="{ row }">
+        <el-button type="primary" link size="small" @click="showDetail(row)">{{ $t('common.detail') }}</el-button>
+        <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') }}</el-button>
+      </template>
+    </ProTable>
 
     <!-- 详情侧边栏 -->
     <el-drawer v-model="detailVisible" :title="$t('ip.ipDetail')" size="50%" direction="rtl">
       <el-descriptions v-if="currentIP" :column="2" border>
         <el-descriptions-item :label="$t('ip.ipAddress')">{{ currentIP.ip }}</el-descriptions-item>
         <el-descriptions-item :label="$t('ip.location')">{{ currentIP.location || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('ip.openPorts')" :span="2">
+        <el-descriptions-item :label="$t('ip.openPorts')" :span="2">
           <div class="detail-ports">
             <el-tag v-for="port in (currentIP.ports || [])" :key="port.port" size="small" style="margin: 2px">
               {{ port.port }}<span v-if="port.service">/{{ port.service }}</span>
@@ -174,268 +79,103 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
 import request from '@/api/request'
-import { clearAsset } from '@/api/asset'
+import { clearAssets } from '@/api/asset'
+import ProTable from '@/components/common/ProTable.vue'
 
 const { t } = useI18n()
-const router = useRouter()
-const route = useRoute()
 const emit = defineEmits(['data-changed'])
 
-const loading = ref(false)
-const tableData = ref([])
-const selectedRows = ref([])
+const proTableRef = ref(null)
 const organizations = ref([])
 const detailVisible = ref(false)
 const currentIP = ref(null)
 
-const searchForm = reactive({ ip: '', port: '', service: '', location: '', orgId: '' })
-const stat = reactive({ total: 0, portCount: 0, serviceCount: 0, newCount: 0 })
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const statLabels = computed(() => ({
+  total: t('ip.totalIPs'),
+  portCount: t('ip.openPorts'),
+  serviceCount: t('ip.serviceTypes'),
+  newCount: t('ip.newIPs')
+}))
 
-// 通过 URL Query 初始化搜索条件
-function initQueryFromUrl() {
-  const q = route.query
-  if (q.ip) searchForm.ip = q.ip
-  if (q.port) searchForm.port = q.port
-  if (q.service) searchForm.service = q.service
-  if (q.location) searchForm.location = q.location
-  if (q.orgId) searchForm.orgId = q.orgId
-  if (q.page) pagination.page = Number(q.page)
-  if (q.pageSize) pagination.pageSize = Number(q.pageSize)
-}
+const ipColumns = computed(() => [
+  { label: t('ip.ipAddress'), prop: 'ip', slot: 'ip', width: 180 },
+  { label: t('ip.location'), prop: 'location', slot: 'location', width: 200 },
+  { label: t('ip.openPorts'), prop: 'ports', slot: 'ports', minWidth: 300 },
+  { label: t('ip.relatedDomains'), prop: 'domains', slot: 'domains', minWidth: 200 },
+  { label: t('ip.organization'), prop: 'orgName', slot: 'org', width: 120 },
+  { label: t('common.updateTime'), prop: 'updateTime', width: 160 },
+  { label: t('common.operation'), slot: 'operation', width: 100, fixed: 'right' }
+])
 
-// 同步状态到 URL Query
-function syncQueryToUrl() {
-  const query = { ...route.query }
-  // 清理或赋值
-  const fields = ['ip', 'port', 'service', 'location', 'orgId']
-  fields.forEach(f => {
-    if (searchForm[f]) query[f] = searchForm[f]
-    else delete query[f]
-  })
-  if (pagination.page > 1) query.page = pagination.page; else delete query.page
-  if (pagination.pageSize !== 20) query.pageSize = pagination.pageSize; else delete query.pageSize
-
-  router.replace({ query }).catch(() => {})
-}
-
-function handleWorkspaceChanged() { pagination.page = 1; loadData(); loadStat() }
-
-onMounted(() => {
-  initQueryFromUrl()
-  loadData(); loadStat(); loadOrganizations()
-  window.addEventListener('workspace-changed', handleWorkspaceChanged)
-})
-onUnmounted(() => { window.removeEventListener('workspace-changed', handleWorkspaceChanged) })
-
-async function loadData() {
-  loading.value = true
-  syncQueryToUrl()
-  try {
-    const res = await request.post('/asset/ip/list', {
-      page: pagination.page, pageSize: pagination.pageSize,
-      ip: searchForm.ip, port: searchForm.port, service: searchForm.service,
-      location: searchForm.location, orgId: searchForm.orgId
-    })
-    if (res.code === 0) { tableData.value = res.list || []; pagination.total = res.total || 0 }
-  } finally { loading.value = false }
-}
-
-async function loadStat() {
-  try {
-    const res = await request.post('/asset/ip/stat', {})
-    if (res.code === 0) {
-      stat.total = res.total || 0
-      stat.portCount = res.portCount || 0
-      stat.serviceCount = res.serviceCount || 0
-      stat.newCount = res.newCount || 0
-    }
-  } catch (e) { console.error(e) }
-}
+const ipSearchItems = computed(() => [
+  { label: t('ip.ipAddress'), prop: 'ip', type: 'input' },
+  { label: t('ip.port'), prop: 'port', type: 'input' },
+  { label: t('ip.service'), prop: 'service', type: 'input' },
+  { label: t('ip.location'), prop: 'location', type: 'input' },
+  {
+    label: t('ip.organization'),
+    prop: 'orgId',
+    type: 'select',
+    options: [
+      { label: t('common.allOrganizations'), value: '' },
+      ...organizations.value.map(org => ({ label: org.name, value: org.id }))
+    ]
+  }
+])
 
 async function loadOrganizations() {
   try {
     const res = await request.post('/organization/list', { page: 1, pageSize: 100 })
     if (res.code === 0) organizations.value = res.list || []
-  } catch (e) { console.error(e) }
+  } catch (e) {
+    console.error(e)
+  }
 }
 
-function handleSearch() { pagination.page = 1; loadData() }
-function handleReset() {
-  Object.assign(searchForm, { ip: '', port: '', service: '', location: '', orgId: '' })
-  handleSearch()
+function showDetail(row) {
+  currentIP.value = row
+  detailVisible.value = true
 }
-
-function handleSelectionChange(rows) { selectedRows.value = rows }
-
-function showDetail(row) { currentIP.value = row; detailVisible.value = true }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm(t('ip.confirmDeleteIP'), t('common.tip'), { type: 'warning' })
-  const res = await request.post('/asset/ip/delete', { ip: row.ip })
-  if (res.code === 0) { ElMessage.success(t('common.deleteSuccess')); loadData(); loadStat() }
+  try {
+    await ElMessageBox.confirm(t('ip.confirmDeleteIP'), t('common.tip'), { type: 'warning' })
+    const res = await request.post('/asset/ip/delete', { ip: row.ip })
+    if (res.code === 0) {
+      ElMessage.success(t('common.deleteSuccess'))
+      proTableRef.value?.loadData()
+      emit('data-changed')
+    }
+  } catch (e) {
+    // cancelled
+  }
 }
 
-async function handleBatchDelete() {
-  if (selectedRows.value.length === 0) return
-  await ElMessageBox.confirm(t('ip.confirmBatchDeleteIP', { count: selectedRows.value.length }), t('common.tip'), { type: 'warning' })
-  const ips = selectedRows.value.map(row => row.ip)
-  const res = await request.post('/asset/ip/batchDelete', { ips })
-  if (res.code === 0) { ElMessage.success(t('common.deleteSuccess')); selectedRows.value = []; loadData(); loadStat(); emit('data-changed') }
-}
-
-  async function handleClear() {
-    try {
-      await ElMessageBox.confirm(t('asset.confirmClearAll'), t('common.warning'), { type: 'error', confirmButtonText: t('asset.confirmClearBtn'), cancelButtonText: t('common.cancel') })
-      const res = await clearAsset()
-      if (res.code === 0) { 
-        ElMessage.success(res.msg || t('asset.clearSuccess'))
-        selectedRows.value = []
-        loadData()
-        loadStat()
-        emit('data-changed') 
-      } else { 
-        ElMessage.error(res.msg || t('asset.clearFailed')) 
-      }
-    } catch (e) {
-      if (e !== 'cancel') {
-        console.error('清空资产失败:', e)
-        ElMessage.error(t('asset.clearFailed'))
-      }
+async function handleClear() {
+  try {
+    await ElMessageBox.confirm(t('asset.confirmClearAll'), t('common.warning'), {
+      type: 'error',
+      confirmButtonText: t('asset.confirmClearBtn'),
+      cancelButtonText: t('common.cancel')
+    })
+    const res = await clearAssets()
+    if (res.code === 0) {
+      ElMessage.success(res.msg || t('asset.clearSuccess'))
+      proTableRef.value?.loadData()
+      emit('data-changed')
+    } else {
+      ElMessage.error(res.msg || t('asset.clearFailed'))
     }
-}
-
-// 导出功能
-async function handleExport(command) {
-  let data = []
-  let filename = ''
-  
-  if (command === 'selected-ip') {
-    if (selectedRows.value.length === 0) {
-      ElMessage.warning(t('ip.pleaseSelectIP'))
-      return
-    }
-    data = selectedRows.value
-    filename = 'ips_selected.txt'
-  } else if (command === 'csv') {
-    // CSV导出所有字段
-    ElMessage.info(t('asset.gettingAllData'))
-    try {
-      const res = await request.post('/asset/ip/list', {
-        ...searchForm, page: 1, pageSize: 10000
-      })
-      if (res.code === 0) {
-        data = res.list || []
-      } else {
-        ElMessage.error(t('asset.getDataFailed'))
-        return
-      }
-    } catch (e) {
-      ElMessage.error(t('asset.getDataFailed'))
-      return
-    }
-    
-    if (data.length === 0) {
-      ElMessage.warning(t('asset.noDataToExport'))
-      return
-    }
-    
-    const headers = ['IP', 'Location', 'Ports', 'Services', 'Domains', 'Organization', 'UpdateTime']
-    const csvRows = [headers.join(',')]
-    
-    for (const row of data) {
-      const ports = (row.ports || []).map(p => p.port).join(';')
-      const services = (row.ports || []).map(p => p.service || '').filter(s => s).join(';')
-      const values = [
-        escapeCsvField(row.ip || ''),
-        escapeCsvField(row.location || ''),
-        escapeCsvField(ports),
-        escapeCsvField(services),
-        escapeCsvField((row.domains || []).join(';')),
-        escapeCsvField(row.orgName || ''),
-        escapeCsvField(row.updateTime || '')
-      ]
-      csvRows.push(values.join(','))
-    }
-    
-    const BOM = '\uFEFF'
-    const blob = new Blob([BOM + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `ips_${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    
-    ElMessage.success(t('asset.exportSuccess', { count: data.length }))
-    return
-  } else {
-    ElMessage.info(t('asset.gettingAllData'))
-    try {
-      const res = await request.post('/asset/ip/list', {
-        ...searchForm, page: 1, pageSize: 10000
-      })
-      if (res.code === 0) {
-        data = res.list || []
-      } else {
-        ElMessage.error(t('asset.getDataFailed'))
-        return
-      }
-    } catch (e) {
-      ElMessage.error(t('asset.getDataFailed'))
-      return
-    }
-    filename = 'ips_all.txt'
-  }
-  
-  if (data.length === 0) {
-    ElMessage.warning(t('asset.noDataToExport'))
-    return
-  }
-  
-  const seen = new Set()
-  const exportData = []
-  for (const row of data) {
-    if (row.ip && !seen.has(row.ip)) {
-      seen.add(row.ip)
-      exportData.push(row.ip)
+  } catch (e) {
+    if (e !== 'cancel') {
+      console.error('清空资产失败:', e)
+      ElMessage.error(t('asset.clearFailed'))
     }
   }
-  
-  if (exportData.length === 0) {
-    ElMessage.warning(t('asset.noDataToExport'))
-    return
-  }
-  
-  const blob = new Blob([exportData.join('\n')], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-  
-  ElMessage.success(t('asset.exportSuccess', { count: exportData.length }))
-}
-
-// CSV字段转义
-function escapeCsvField(field) {
-  if (field == null) return ''
-  const str = String(field)
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return '"' + str.replace(/"/g, '""') + '"'
-  }
-  return str
 }
 
 function getPortType(service) {
@@ -446,25 +186,29 @@ function getPortType(service) {
   return 'info'
 }
 
-function refresh() { loadData(); loadStat() }
+function refresh() {
+  proTableRef.value?.loadData()
+}
+
+function handleWorkspaceChanged() {
+  loadOrganizations()
+}
+
+onMounted(() => {
+  loadOrganizations()
+  window.addEventListener('workspace-changed', handleWorkspaceChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('workspace-changed', handleWorkspaceChanged)
+})
 
 defineExpose({ refresh })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .ip-view {
-  .search-card { margin-bottom: 16px; }
-  .stat-row {
-    margin-bottom: 16px;
-    .stat-card {
-      text-align: center;
-      .stat-value { font-size: 28px; font-weight: 600; color: var(--el-color-primary); }
-      .stat-label { color: var(--el-text-color-secondary); margin-top: 8px; }
-    }
-  }
-  .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
-    .total-info { color: var(--el-text-color-secondary); font-size: 14px; }
-  }
+  height: 100%;
   .ip-cell { display: flex; align-items: center; gap: 8px;
     .ip-text { font-family: monospace; font-weight: 500; }
   }
@@ -481,7 +225,5 @@ defineExpose({ refresh })
     }
   }
   .detail-ports { max-height: 150px; overflow-y: auto; }
-  .pagination { margin-top: 16px; justify-content: flex-end; }
 }
 </style>
-
