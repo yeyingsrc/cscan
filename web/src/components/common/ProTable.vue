@@ -11,7 +11,7 @@
     </div>
 
     <!-- Main Table -->
-    <el-table :data="tableData" v-bind="$attrs">
+    <el-table v-loading="loading" :data="tableData" v-bind="$attrs">
       <template v-for="(col, index) in columns" :key="index">
         <!-- If column has a slot -->
         <el-table-column v-if="col.slot" v-bind="col">
@@ -29,15 +29,27 @@
       </template>
     </el-table>
 
-    <!-- Pagination or footer (placeholder for now) -->
+    <!-- Pagination -->
     <div class="pro-table-footer">
-      <slot name="footer"></slot>
+      <slot name="footer">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="pagination.total"
+          @size-change="loadData"
+          @current-change="loadData"
+        />
+      </slot>
     </div>
   </el-card>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import request from '@/api/request'
 
 defineOptions({
   name: 'ProTable',
@@ -46,8 +58,8 @@ defineOptions({
 
 const props = defineProps({
   api: {
-    type: Function,
-    default: null
+    type: String,
+    default: ''
   },
   columns: {
     type: Array,
@@ -55,12 +67,109 @@ const props = defineProps({
   }
 })
 
-// Will hold the actual data fetched from the API (for later stages)
-const tableData = ref([])
+const router = useRouter()
+const route = useRoute()
 
-// Expose anything parent might need (for future)
+// State
+const loading = ref(false)
+const tableData = ref([])
+const pagination = reactive({
+  page: 1,
+  pageSize: 10,
+  total: 0
+})
+
+// Placeholder for advanced search form, currently synced with url
+const searchForm = reactive({})
+
+// Initialize state from URL query
+function initQueryFromUrl() {
+  const query = route.query
+  if (query.page) pagination.page = parseInt(query.page) || 1
+  if (query.pageSize) pagination.pageSize = parseInt(query.pageSize) || 10
+
+  // Load remaining query parameters into searchForm
+  for (const key in query) {
+    if (key !== 'page' && key !== 'pageSize') {
+      searchForm[key] = query[key]
+    }
+  }
+}
+
+// Sync state to URL query
+function syncQueryToUrl() {
+  const query = {
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    ...searchForm
+  }
+
+  // Remove empty values to clean up URL
+  Object.keys(query).forEach(key => {
+    if (query[key] === '' || query[key] === null || query[key] === undefined) {
+      delete query[key]
+    }
+  })
+
+  router.replace({ path: route.path, query }).catch(() => {})
+}
+
+// Data fetching
+async function loadData() {
+  if (!props.api) return
+
+  loading.value = true
+  syncQueryToUrl()
+
+  try {
+    const payload = {
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      ...searchForm
+    }
+
+    const res = await request.post(props.api, payload)
+    if (res.code === 0) {
+      tableData.value = res.list || []
+      pagination.total = res.total || 0
+    }
+  } catch (error) {
+    console.error('Failed to load table data:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// Reset and reload helper
+function handleSearch() {
+  pagination.page = 1
+  loadData()
+}
+
+// Handle workspace changes (reset page, reload data)
+function handleWorkspaceChanged() {
+  pagination.page = 1
+  loadData()
+}
+
+onMounted(() => {
+  initQueryFromUrl()
+  loadData()
+  window.addEventListener('workspace-changed', handleWorkspaceChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('workspace-changed', handleWorkspaceChanged)
+})
+
+// Expose methods and state to parent component
 defineExpose({
-  tableData
+  tableData,
+  loading,
+  pagination,
+  searchForm,
+  loadData,
+  handleSearch
 })
 </script>
 
