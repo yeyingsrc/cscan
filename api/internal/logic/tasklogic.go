@@ -1434,7 +1434,7 @@ func (l *GetTaskLogsLogic) GetTaskLogs(req *types.GetTaskLogsReq) (resp *types.G
 	streamKey := "cscan:task:logs:" + req.TaskId
 	l.Logger.Infof("GetTaskLogs: querying Redis stream key=%s, limit=%d, search=%s", streamKey, limit, req.Search)
 
-	logs, err := l.svcCtx.RedisClient.XRevRange(l.ctx, streamKey, "+", "-").Result()
+	logs, err := l.svcCtx.RedisClient.XRevRangeN(l.ctx, streamKey, "+", "-", int64(limit*10)).Result()
 	if err != nil {
 		l.Logger.Errorf("GetTaskLogs: failed to read logs from Redis, taskId=%s, streamKey=%s, error=%v", req.TaskId, streamKey, err)
 		// 返回空列表而不是错误

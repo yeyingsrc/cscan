@@ -126,12 +126,9 @@ func WorkerLogsHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		flusher.Flush()
 
 		// 先发送最近的历史日志
-		logs, err := svcCtx.RedisClient.XRevRange(r.Context(), "cscan:worker:logs", "+", "-").Result()
+		logs, err := svcCtx.RedisClient.XRevRangeN(r.Context(), "cscan:worker:logs", "+", "-", 100).Result()
 		if err == nil && len(logs) > 0 {
-			count := 100
-			if len(logs) < count {
-				count = len(logs)
-			}
+			count := len(logs)
 			for i := count - 1; i >= 0; i-- {
 				if data, ok := logs[i].Values["data"].(string); ok {
 					fmt.Fprintf(w, "data: %s\n\n", data)
@@ -210,7 +207,7 @@ func WorkerLogsHistoryHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 
 		if req.NewerThan != "" {
 			// 获取比指定ID更新的日志（用于实时更新）
-			rawLogs, e := svcCtx.RedisClient.XRange(r.Context(), "cscan:worker:logs", "("+req.NewerThan, "+").Result()
+			rawLogs, e := svcCtx.RedisClient.XRangeN(r.Context(), "cscan:worker:logs", "("+req.NewerThan, "+", int64(req.Limit*10)).Result()
 			err = e
 			for _, l := range rawLogs {
 				logs = append(logs, struct {
@@ -220,7 +217,7 @@ func WorkerLogsHistoryHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			}
 		} else if req.LastId != "" {
 			// 分页：获取比LastId更旧的日志
-			rawLogs, e := svcCtx.RedisClient.XRevRange(r.Context(), "cscan:worker:logs", "("+req.LastId, "-").Result()
+			rawLogs, e := svcCtx.RedisClient.XRevRangeN(r.Context(), "cscan:worker:logs", "("+req.LastId, "-", int64(req.Limit*10)).Result()
 			err = e
 			for _, l := range rawLogs {
 				logs = append(logs, struct {
@@ -230,7 +227,7 @@ func WorkerLogsHistoryHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			}
 		} else {
 			// 首次加载：获取最新的日志
-			rawLogs, e := svcCtx.RedisClient.XRevRange(r.Context(), "cscan:worker:logs", "+", "-").Result()
+			rawLogs, e := svcCtx.RedisClient.XRevRangeN(r.Context(), "cscan:worker:logs", "+", "-", int64(req.Limit*10)).Result()
 			err = e
 			for _, l := range rawLogs {
 				logs = append(logs, struct {
@@ -322,7 +319,7 @@ func WorkerLogsExportHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			req.Format = "json"
 		}
 
-		logs, err := svcCtx.RedisClient.XRevRange(r.Context(), "cscan:worker:logs", "+", "-").Result()
+		logs, err := svcCtx.RedisClient.XRevRangeN(r.Context(), "cscan:worker:logs", "+", "-", 10000).Result()
 		if err != nil {
 			response.Error(w, err)
 			return

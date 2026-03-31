@@ -303,10 +303,11 @@ PageLoop:
 				break PageLoop
 			}
 			for _, a := range result.Data.Arr {
-				component := ""
-				if len(a.Component) > 0 {
-					component = a.Component[0].Name
+				var components []string
+				for _, c := range a.Component {
+					components = append(components, c.Name)
 				}
+				component := strings.Join(components, ",")
 				results = append(results, types.OnlineSearchResult{
 					Host: a.URL, IP: a.IP, Port: a.Port, Protocol: a.Protocol,
 					Domain: a.Domain, Title: a.WebTitle, Server: component,

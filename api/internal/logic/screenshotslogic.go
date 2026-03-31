@@ -112,7 +112,7 @@ func (l *ScreenshotsLogic) Screenshots(req *types.ScreenshotsReq, workspaceId st
 		}
 
 		// 查询资产
-		assets, err := assetModel.Find(l.ctx, filter, 0, 0)
+		assets, err := assetModel.FindWithScreenshot(l.ctx, filter, 0, 0)
 		if err != nil {
 			l.Logger.Errorf("查询工作空间 %s 资产失败: %v", wsId, err)
 			continue
@@ -120,12 +120,22 @@ func (l *ScreenshotsLogic) Screenshots(req *types.ScreenshotsReq, workspaceId st
 
 		// 转换为截图格式
 		for _, asset := range assets {
-			// 获取第一个IP地址
+			// 获取首个IP及所有IP列表
 			ip := ""
-			if len(asset.Ip.IpV4) > 0 {
-				ip = asset.Ip.IpV4[0].IPName
-			} else if len(asset.Ip.IpV6) > 0 {
-				ip = asset.Ip.IpV6[0].IPName
+			var ips []string
+			if true {
+				if len(asset.Ip.IpV4) > 0 {
+					ip = asset.Ip.IpV4[0].IPName
+				} else if len(asset.Ip.IpV6) > 0 {
+					ip = asset.Ip.IpV6[0].IPName
+				}
+
+				for _, v4 := range asset.Ip.IpV4 {
+					ips = append(ips, v4.IPName)
+				}
+				for _, v6 := range asset.Ip.IpV6 {
+					ips = append(ips, v6.IPName)
+				}
 			}
 
 			// 转换技术栈
@@ -143,6 +153,7 @@ func (l *ScreenshotsLogic) Screenshots(req *types.ScreenshotsReq, workspaceId st
 				Name:         asset.Host,
 				Port:         asset.Port,
 				IP:           ip,
+				Ips:          ips,
 				Status:       asset.HttpStatus,
 				StatusText:   statusText,
 				Title:        asset.Title,

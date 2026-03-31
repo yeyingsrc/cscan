@@ -324,12 +324,9 @@ func TaskLogsStreamHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 
 		// 先发送最近的历史日志
 		streamKey := "cscan:task:logs:" + taskId
-		logs, err := svcCtx.RedisClient.XRevRange(r.Context(), streamKey, "+", "-").Result()
+		logs, err := svcCtx.RedisClient.XRevRangeN(r.Context(), streamKey, "+", "-", 100).Result()
 		if err == nil && len(logs) > 0 {
-			count := 100
-			if len(logs) < count {
-				count = len(logs)
-			}
+			count := len(logs)
 			for i := count - 1; i >= 0; i-- {
 				if data, ok := logs[i].Values["data"].(string); ok {
 					fmt.Fprintf(w, "data: %s\n\n", data)

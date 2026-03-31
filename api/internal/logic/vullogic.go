@@ -246,38 +246,25 @@ func NewVulStatLogic(ctx context.Context, svcCtx *svc.ServiceContext) *VulStatLo
 
 func (l *VulStatLogic) VulStat(workspaceId string) (resp *types.VulStatResp, err error) {
 	var total, critical, high, medium, low, info, week, month int64
+	now := time.Now()
 
 	// 获取需要查询的工作空间列表
 	wsIds := common.GetWorkspaceIds(l.ctx, l.svcCtx, workspaceId)
 
 	for _, wsId := range wsIds {
 		vulModel := l.svcCtx.GetVulModel(wsId)
-
-		// 统计总数
-		c, _ := vulModel.Count(l.ctx, bson.M{})
-		total += c
-
-		// 按严重级别统计
-		c, _ = vulModel.Count(l.ctx, bson.M{"severity": "critical"})
-		critical += c
-		c, _ = vulModel.Count(l.ctx, bson.M{"severity": "high"})
-		high += c
-		c, _ = vulModel.Count(l.ctx, bson.M{"severity": "medium"})
-		medium += c
-		c, _ = vulModel.Count(l.ctx, bson.M{"severity": "low"})
-		low += c
-		c, _ = vulModel.Count(l.ctx, bson.M{"severity": "info"})
-		info += c
-
-		// 近7天和近30天统计
-		now := time.Now()
-		weekAgo := now.AddDate(0, 0, -7)
-		monthAgo := now.AddDate(0, 0, -30)
-
-		c, _ = vulModel.Count(l.ctx, bson.M{"create_time": bson.M{"$gte": weekAgo}})
-		week += c
-		c, _ = vulModel.Count(l.ctx, bson.M{"create_time": bson.M{"$gte": monthAgo}})
-		month += c
+		stats, statErr := vulModel.AggregateStats(l.ctx, now)
+		if statErr != nil {
+			continue
+		}
+		total += stats.Total
+		critical += stats.Critical
+		high += stats.High
+		medium += stats.Medium
+		low += stats.Low
+		info += stats.Info
+		week += stats.Week
+		month += stats.Month
 	}
 
 	return &types.VulStatResp{

@@ -98,7 +98,7 @@ func sortMapToStatItems(m map[string]int, limit int) []types.StatItem {
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Value > sorted[j].Value
 	})
-	
+
 	result := make([]types.StatItem, 0, limit)
 	for i, item := range sorted {
 		if i >= limit {
@@ -122,7 +122,7 @@ func sortMapToStatItemsInt(m map[int]int, limit int) []types.StatItem {
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Value > sorted[j].Value
 	})
-	
+
 	result := make([]types.StatItem, 0, limit)
 	for i, item := range sorted {
 		if i >= limit {
@@ -142,7 +142,7 @@ func sortIconHashMap(m map[string]*types.IconHashStatItem, limit int) []types.Ic
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Count > sorted[j].Count
 	})
-	
+
 	result := make([]types.IconHashStatItem, 0, limit)
 	for i, item := range sorted {
 		if i >= limit {
@@ -235,7 +235,7 @@ func NewAssetListLogic(ctx context.Context, svcCtx *svc.ServiceContext) *AssetLi
 func (l *AssetListLogic) AssetList(req *types.AssetListReq, workspaceId string) (resp *types.AssetListResp, err error) {
 	// 添加调试日志
 	l.Logger.Infof("AssetList查询: workspaceId=%s, page=%d, pageSize=%d", workspaceId, req.Page, req.PageSize)
-	
+
 	// 构建查询条件
 	filter := bson.M{}
 
@@ -306,29 +306,29 @@ func (l *AssetListLogic) AssetList(req *types.AssetListReq, workspaceId string) 
 		// 优化：限制每个工作空间的查询数量，避免内存溢出
 		maxPerWorkspace := req.PageSize * 3 // 每个工作空间最多查询3页的数据
 		var allAssets []model.Asset
-		
+
 		for _, wsId := range wsIds {
 			assetModel := l.svcCtx.GetAssetModel(wsId)
-			
+
 			// 先检查该工作空间是否有数据
 			wsTotal, err := assetModel.Count(l.ctx, filter)
 			if err != nil || wsTotal == 0 {
 				continue // 跳过没有数据的工作空间
 			}
 			total += wsTotal
-			
+
 			// 限制查询数量，避免内存问题
 			limit := maxPerWorkspace
 			if wsTotal < int64(limit) {
 				limit = int(wsTotal)
 			}
-			
+
 			// 按时间排序查询
 			sortField := "update_time"
 			if !req.SortByUpdate {
 				sortField = "create_time"
 			}
-			
+
 			wsAssets, err := assetModel.FindWithSort(l.ctx, filter, 1, limit, sortField)
 			if err != nil {
 				l.Logger.Errorf("查询工作空间 %s 资产失败: %v", wsId, err)
@@ -336,7 +336,7 @@ func (l *AssetListLogic) AssetList(req *types.AssetListReq, workspaceId string) 
 			}
 			allAssets = append(allAssets, wsAssets...)
 		}
-		
+
 		// 如果没有找到任何资产
 		if len(allAssets) == 0 {
 			return &types.AssetListResp{
@@ -346,10 +346,10 @@ func (l *AssetListLogic) AssetList(req *types.AssetListReq, workspaceId string) 
 				List:  []types.Asset{},
 			}, nil
 		}
-		
+
 		// 按时间排序所有资产
 		sortAssetsByTime(allAssets, req.SortByUpdate)
-		
+
 		// 分页
 		start := (req.Page - 1) * req.PageSize
 		end := start + req.PageSize
@@ -364,13 +364,13 @@ func (l *AssetListLogic) AssetList(req *types.AssetListReq, workspaceId string) 
 	} else {
 		// 查询指定工作空间
 		assetModel := l.svcCtx.GetAssetModel(workspaceId)
-		
+
 		total, err = assetModel.Count(l.ctx, filter)
 		if err != nil {
 			return &types.AssetListResp{Code: 500, Msg: "查询失败"}, nil
 		}
 
-		// 查询列表 - 支持按风险评分排序 
+		// 查询列表 - 支持按风险评分排序
 		if req.SortByRisk {
 			assets, err = assetModel.FindByRiskScore(l.ctx, filter, req.Page, req.PageSize, false)
 		} else {
@@ -438,35 +438,35 @@ func (l *AssetListLogic) AssetList(req *types.AssetListReq, workspaceId string) 
 		}
 
 		list = append(list, types.Asset{
-			Id:         a.Id.Hex(),
-			Authority:  a.Authority,
-			Host:       a.Host,
-			Port:       a.Port,
-			Category:   a.Category,
-			Service:    a.Service,
-			Title:      a.Title,
-			App:        a.App,
-			HttpStatus: a.HttpStatus,
-			HttpHeader: a.HttpHeader,
-			HttpBody:   a.HttpBody,
-			Banner:     a.Banner,
-			IconHash:   a.IconHash,
-			IconData:   iconData,
-			Screenshot: a.Screenshot,
-			Location:   location,
-			IP:         ipInfo,
-			IsCDN:      a.IsCDN,
-			IsCloud:    a.IsCloud,
-			IsNew:      a.IsNewAsset,
-			IsUpdated:  a.IsUpdated,
-			CreateTime: a.CreateTime.Local().Format("2006-01-02 15:04:05"),
-			UpdateTime: a.UpdateTime.Local().Format("2006-01-02 15:04:05"),
+			Id:                   a.Id.Hex(),
+			Authority:            a.Authority,
+			Host:                 a.Host,
+			Port:                 a.Port,
+			Category:             a.Category,
+			Service:              a.Service,
+			Title:                a.Title,
+			App:                  a.App,
+			HttpStatus:           a.HttpStatus,
+			HttpHeader:           a.HttpHeader,
+			HttpBody:             a.HttpBody,
+			Banner:               a.Banner,
+			IconHash:             a.IconHash,
+			IconData:             iconData,
+			Screenshot:           a.Screenshot,
+			Location:             location,
+			IP:                   ipInfo,
+			IsCDN:                a.IsCDN,
+			IsCloud:              a.IsCloud,
+			IsNew:                a.IsNewAsset,
+			IsUpdated:            a.IsUpdated,
+			CreateTime:           a.CreateTime.Local().Format("2006-01-02 15:04:05"),
+			UpdateTime:           a.UpdateTime.Local().Format("2006-01-02 15:04:05"),
 			LastStatusChangeTime: formatTimeIfNotZero(a.LastStatusChangeTime),
 			FirstSeenTaskId:      a.FirstSeenTaskId,
 			// 组织信息
 			OrgId:   a.OrgId,
 			OrgName: orgName,
-			// 新增字段 - 风险评分 
+			// 新增字段 - 风险评分
 			RiskScore: a.RiskScore,
 			RiskLevel: a.RiskLevel,
 		})
@@ -511,44 +511,40 @@ func (l *AssetStatLogic) AssetStat(workspaceId string) (resp *types.AssetStatRes
 		titleMap := make(map[string]int)
 		iconHashMap := make(map[string]*types.IconHashStatItem)
 		riskMap := make(map[string]int)
-		
+
 		for _, wsId := range wsIds {
 			assetModel := l.svcCtx.GetAssetModel(wsId)
-			
-			// 检查工作空间是否有数据
-			wsTotal, err := assetModel.Count(l.ctx, bson.M{})
-			if err != nil || wsTotal == 0 {
+
+			// 概览统计（总数/新资产/更新资产）
+			overview, statErr := assetModel.AggregateOverviewStats(l.ctx)
+			if statErr != nil || overview.TotalAsset == 0 {
 				l.Logger.Infof("跳过空工作空间: %s", wsId)
-				continue // 跳过没有数据的工作空间
+				continue
 			}
-			
-			totalAsset += wsTotal
-			totalHost += wsTotal
-			
-			wsNew, _ := assetModel.Count(l.ctx, bson.M{"new": true})
-			newCount += wsNew
-			
-			wsUpdated, _ := assetModel.Count(l.ctx, bson.M{"update": true})
-			updatedCount += wsUpdated
-			
+
+			totalAsset += overview.TotalAsset
+			totalHost += overview.TotalAsset
+			newCount += overview.NewCount
+			updatedCount += overview.UpdatedCount
+
 			// 聚合端口
 			portStats, _ := assetModel.AggregatePort(l.ctx, 20)
 			for _, s := range portStats {
 				portMap[s.Port] += s.Count
 			}
-			
+
 			// 聚合服务
 			serviceStats, _ := assetModel.Aggregate(l.ctx, "service", 20)
 			for _, s := range serviceStats {
 				serviceMap[s.Field] += s.Count
 			}
-			
+
 			// 聚合应用（使用专门的AggregateApp方法展开数组）
 			appStats, _ := assetModel.AggregateApp(l.ctx, 20)
 			for _, s := range appStats {
 				appMap[s.Field] += s.Count
 			}
-			
+
 			// 聚合标题
 			titleStats, _ := assetModel.Aggregate(l.ctx, "title", 20)
 			for _, s := range titleStats {
@@ -556,7 +552,7 @@ func (l *AssetStatLogic) AssetStat(workspaceId string) (resp *types.AssetStatRes
 					titleMap[s.Field] += s.Count
 				}
 			}
-			
+
 			// 聚合 IconHash
 			iconHashStats, _ := assetModel.AggregateIconHash(l.ctx, 20)
 			for _, s := range iconHashStats {
@@ -575,14 +571,14 @@ func (l *AssetStatLogic) AssetStat(workspaceId string) (resp *types.AssetStatRes
 					}
 				}
 			}
-			
+
 			// 聚合风险等级
 			wsRisk, _ := assetModel.AggregateRiskLevel(l.ctx)
 			for k, v := range wsRisk {
 				riskMap[k] += v
 			}
 		}
-		
+
 		// 转换为排序后的列表
 		topPorts = sortMapToStatItemsInt(portMap, 10)
 		topService = sortMapToStatItems(serviceMap, 10)
@@ -593,15 +589,14 @@ func (l *AssetStatLogic) AssetStat(workspaceId string) (resp *types.AssetStatRes
 	} else {
 		assetModel := l.svcCtx.GetAssetModel(workspaceId)
 
-		// 总资产数
-		totalAsset, _ = assetModel.Count(l.ctx, bson.M{})
-		totalHost = totalAsset
-
-		// 新资产数
-		newCount, _ = assetModel.Count(l.ctx, bson.M{"new": true})
-
-		// 有更新的资产数
-		updatedCount, _ = assetModel.Count(l.ctx, bson.M{"update": true})
+		// 概览统计（总数/新资产/更新资产）
+		overview, _ := assetModel.AggregateOverviewStats(l.ctx)
+		if overview != nil {
+			totalAsset = overview.TotalAsset
+			totalHost = overview.TotalAsset
+			newCount = overview.NewCount
+			updatedCount = overview.UpdatedCount
+		}
 
 		// Top端口
 		portStats, _ := assetModel.AggregatePort(l.ctx, 10)
@@ -661,7 +656,7 @@ func (l *AssetStatLogic) AssetStat(workspaceId string) (resp *types.AssetStatRes
 			})
 		}
 
-		// 风险等级分布 
+		// 风险等级分布
 		riskDistribution, _ = assetModel.AggregateRiskLevel(l.ctx)
 	}
 
@@ -702,7 +697,7 @@ func (l *AssetDeleteLogic) AssetDelete(req *types.AssetDeleteReq, workspaceId st
 	if wsId == "" {
 		wsId = workspaceId
 	}
-	
+
 	assetModel := l.svcCtx.GetAssetModel(wsId)
 	err = assetModel.Delete(l.ctx, req.Id)
 	if err != nil {
@@ -756,10 +751,10 @@ func NewAssetClearLogic(ctx context.Context, svcCtx *svc.ServiceContext) *AssetC
 
 func (l *AssetClearLogic) AssetClear(workspaceId string) (resp *types.BaseResp, err error) {
 	var totalDeleted int64
-	
+
 	// 获取需要清空的工作空间列表
 	wsIds := common.GetWorkspaceIds(l.ctx, l.svcCtx, workspaceId)
-	
+
 	// 清空所有相关工作空间的资产
 	for _, wsId := range wsIds {
 		assetModel := l.svcCtx.GetAssetModel(wsId)
@@ -769,15 +764,14 @@ func (l *AssetClearLogic) AssetClear(workspaceId string) (resp *types.BaseResp, 
 			continue
 		}
 		totalDeleted += deleted
-		
+
 		// 清空对应的资产历史表
 		historyModel := l.svcCtx.GetAssetHistoryModel(wsId)
 		historyModel.Clear(l.ctx)
 	}
-	
+
 	return &types.BaseResp{Code: 0, Msg: "成功清空 " + strconv.FormatInt(totalDeleted, 10) + " 条资产"}, nil
 }
-
 
 // AssetHistoryLogic 资产历史记录
 type AssetHistoryLogic struct {
@@ -818,7 +812,7 @@ func (l *AssetHistoryLogic) AssetHistory(req *types.AssetHistoryReq, workspaceId
 				NewValue: c.NewValue,
 			})
 		}
-		
+
 		list = append(list, types.AssetHistoryItem{
 			Id:         h.Id.Hex(),
 			Authority:  h.Authority,
@@ -867,7 +861,7 @@ func (l *AssetImportLogic) AssetImport(req *types.AssetImportReq, workspaceId st
 	}
 
 	assetModel := l.svcCtx.GetAssetModel(workspaceId)
-	
+
 	var newCount, skipCount, errorCount int
 	var errorDetails []string
 	total := 0
@@ -951,11 +945,11 @@ func (l *AssetImportLogic) AssetImport(req *types.AssetImportReq, workspaceId st
 // parseTarget 解析目标字符串，支持 IP:端口、URL、域名 格式
 func parseTarget(target string) (host string, port int, scheme string, err error) {
 	target = strings.TrimSpace(target)
-	
+
 	if target == "" {
 		return "", 0, "", fmt.Errorf("目标不能为空")
 	}
-	
+
 	// 处理 URL 格式
 	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
 		// 解析 URL
@@ -966,21 +960,21 @@ func parseTarget(target string) (host string, port int, scheme string, err error
 			scheme = "http"
 			target = strings.TrimPrefix(target, "http://")
 		}
-		
+
 		// 去掉路径部分
 		if idx := strings.Index(target, "/"); idx > 0 {
 			target = target[:idx]
 		}
-		
+
 		// 去掉查询参数
 		if idx := strings.Index(target, "?"); idx > 0 {
 			target = target[:idx]
 		}
-		
+
 		if target == "" {
 			return "", 0, "", fmt.Errorf("URL格式错误：缺少主机名")
 		}
-		
+
 		// 解析 host:port
 		if strings.Contains(target, ":") {
 			parts := strings.SplitN(target, ":", 2)
@@ -1023,12 +1017,12 @@ func parseTarget(target string) (host string, port int, scheme string, err error
 		port = 80
 		scheme = "http"
 	}
-	
+
 	// 校验端口范围
 	if port <= 0 || port > 65535 {
 		return "", 0, "", fmt.Errorf("端口超出范围(1-65535)：%d", port)
 	}
-	
+
 	// 校验主机名格式（IP或域名）
 	if !isValidHost(host) {
 		return "", 0, "", fmt.Errorf("无效的主机名或IP：%s", host)
@@ -1042,18 +1036,18 @@ func isValidHost(host string) bool {
 	if host == "" {
 		return false
 	}
-	
+
 	// 检查是否为有效IP
 	if net.ParseIP(host) != nil {
 		return true
 	}
-	
+
 	// 检查是否为有效域名
 	// 域名规则：由字母、数字、连字符组成，点分隔，每段不超过63字符
 	if len(host) > 253 {
 		return false
 	}
-	
+
 	// 简单的域名格式校验
 	domainRegex := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	return domainRegex.MatchString(host)
