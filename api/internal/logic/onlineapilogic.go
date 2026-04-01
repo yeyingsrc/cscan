@@ -2,13 +2,16 @@ package logic
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"strings"
+	"time"
+
+	"cscan/api/internal/logic/common"
 	"cscan/api/internal/svc"
 	"cscan/api/internal/types"
 	"cscan/model"
 	"cscan/onlineapi"
-	"fmt"
-	"strings"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -122,6 +125,42 @@ func (l *OnlineAPILogic) Search(req *types.OnlineSearchReq, workspaceId string) 
 	return &types.OnlineSearchResp{Code: 0, Msg: "success", Total: total, List: results}, nil
 }
 
+// extractDomain 从 host 字段中提取域名部分（去除协议前缀、端口、路径）
+// 如果提取结果是 IP 地址则返回空字符串
+func extractDomain(host string) string {
+	cleaned := cleanHost(host)
+	if cleaned == "" {
+		return ""
+	}
+	// 如果是 IP 地址，不作为域名返回
+	if net.ParseIP(cleaned) != nil {
+		return ""
+	}
+	return cleaned
+}
+
+// resolveHostAndDomain 从在线搜索结果中解析 host 和 domain
+// 优先从 rawHost 提取域名作为 host（资产标识），IP 仅存到 Ip 字段
+// 返回值: host（用于 Authority/Host 字段）, domain（用于 Domain 字段）
+func resolveHostAndDomain(rawHost, rawIP, rawDomain string) (host, domain string) {
+	// 从 rawHost 中提取域名（去掉协议/端口/路径）
+	hostDomain := extractDomain(rawHost)
+
+	if hostDomain != "" {
+		// rawHost 是域名（如 "https://ueapp-oss-static.leapmotor.com" → "ueapp-oss-static.leapmotor.com"）
+		host = hostDomain
+		domain = hostDomain
+	} else {
+		// rawHost 是 IP 或为空，用 cleanHost 清理后作为 host
+		host = cleanHost(rawHost)
+		if host == "" {
+			host = rawIP
+		}
+		domain = rawDomain
+	}
+	return
+}
+
 // cleanHost removes protocol, paths, and port from host string
 func cleanHost(host string) string {
 	host = strings.TrimSpace(host)
@@ -151,17 +190,16 @@ func cleanHost(host string) string {
 }
 
 func (l *OnlineAPILogic) Import(req *types.OnlineImportReq, workspaceId string) (*types.BaseResp, error) {
+	// 将 "all" 解析为真实的默认工作空间，避免写入 all_asset 集合
+	workspaceId = common.GetDefaultWorkspaceId(l.ctx, l.svc, workspaceId)
 	assetModel := l.svc.GetAssetModel(workspaceId)
 
 	count := 0
 	for _, a := range req.Assets {
 		apps := parseApps(a.Product)
 
-		// Use IP as host if available, otherwise clean the Host field
-		host := a.IP
-		if host == "" {
-			host = cleanHost(a.Host)
-		}
+		// 优先从 host 字段提取域名作为资产标识，IP 只存到 Ip 字段
+		host, domain := resolveHostAndDomain(a.Host, a.IP, a.Domain)
 
 		// Skip if host is empty
 		if host == "" {
@@ -194,7 +232,7 @@ func (l *OnlineAPILogic) Import(req *types.OnlineImportReq, workspaceId string) 
 			Labels:    labels,      // 添加标签
 			IsHTTP:    a.Protocol == "http" || a.Protocol == "https",
 			// Map optional fields
-			Domain: a.Domain,
+			Domain: domain,
 			Server: a.Server,
 			Banner: a.Banner,
 			// Initialize default fields to ensure compatibility
@@ -232,13 +270,15 @@ func (l *OnlineAPILogic) Import(req *types.OnlineImportReq, workspaceId string) 
 
 // ImportAll 导入全部资产（自动遍历所有页面）
 func (l *OnlineAPILogic) ImportAll(req *types.OnlineImportAllReq, workspaceId string) (*types.OnlineImportAllResp, error) {
-	// 获取API配置
+	// 先用原始 workspaceId 获取API配置（配置存储在原始集合中）
 	configModel := model.NewAPIConfigModel(l.svc.MongoDB, workspaceId)
 	config, err := configModel.FindByPlatform(l.ctx, req.Platform)
 	if err != nil {
 		return &types.OnlineImportAllResp{Code: 404, Msg: "未配置" + req.Platform + "的API密钥"}, nil
 	}
 
+	// 将 "all" 解析为真实的默认工作空间，避免资产写入 all_asset 集合
+	workspaceId = common.GetDefaultWorkspaceId(l.ctx, l.svc, workspaceId)
 	assetModel := l.svc.GetAssetModel(workspaceId)
 	pageSize := req.PageSize
 	if pageSize <= 0 {
@@ -259,6 +299,8 @@ func (l *OnlineAPILogic) ImportAll(req *types.OnlineImportAllReq, workspaceId st
 	totalFetched := 0
 	totalImport := 0
 	currentPage := 1
+	apiTotal := 0     // API 报告的总结果数（Hunter/Quake 有此字段）
+	hasAPITotal := false // 标记是否有可用的 API 总数
 
 PageLoop:
 	for {
@@ -268,6 +310,7 @@ PageLoop:
 		}
 
 		var results []types.OnlineSearchResult
+		var rawResultCount int // API 原始返回条数（解析前）
 
 		switch req.Platform {
 		case "fofa":
@@ -279,6 +322,12 @@ PageLoop:
 				}
 				break PageLoop
 			}
+			// FOFA 的 size 字段是查询匹配的总结果数，用于判断分页终止
+			if currentPage == 1 && result.Size > 0 {
+				apiTotal = result.Size
+				hasAPITotal = true
+			}
+			rawResultCount = len(result.Results)
 			assets := client.ParseResults(result)
 			for _, a := range assets {
 				results = append(results, types.OnlineSearchResult{
@@ -290,7 +339,6 @@ PageLoop:
 			}
 		case "hunter":
 			client := onlineapi.NewHunterClient(config.Key)
-			// Hunter API page_size 最大为100
 			hunterPageSize := pageSize
 			if hunterPageSize > 100 {
 				hunterPageSize = 100
@@ -302,6 +350,11 @@ PageLoop:
 				}
 				break PageLoop
 			}
+			if currentPage == 1 {
+				apiTotal = result.Data.Total
+				hasAPITotal = true
+			}
+			rawResultCount = len(result.Data.Arr)
 			for _, a := range result.Data.Arr {
 				var components []string
 				for _, c := range a.Component {
@@ -324,10 +377,14 @@ PageLoop:
 				}
 				break PageLoop
 			}
-			// 检查是否配额用尽
 			if result.Data.IsExhausted {
 				break PageLoop
 			}
+			if currentPage == 1 {
+				apiTotal = result.Meta.Pagination.Total
+				hasAPITotal = true
+			}
+			rawResultCount = len(result.Data.Items)
 			for _, a := range result.Data.Items {
 				results = append(results, types.OnlineSearchResult{
 					Host: a.Service.HTTP.Host, IP: a.IP, Port: a.Port, Protocol: a.Service.Name,
@@ -340,21 +397,20 @@ PageLoop:
 		}
 
 		// 没有更多数据了
-		if len(results) == 0 {
+		if rawResultCount == 0 {
 			break
 		}
 
-		totalFetched += len(results)
+		// 用 API 原始返回条数累加，而非 ParseResults 过滤后的条数
+		// ParseResults 会过滤 len(row)<15 的行，导致 len(results) < rawResultCount
+		totalFetched += rawResultCount
 
 		// 导入当前页的资产
 		for _, a := range results {
 			apps := parseApps(a.Product)
 
-			// Use IP as host if available, otherwise clean the Host field
-			host := a.IP
-			if host == "" {
-				host = cleanHost(a.Host)
-			}
+			// 优先从 host 字段提取域名作为资产标识，IP 只存到 Ip 字段
+			host, domain := resolveHostAndDomain(a.Host, a.IP, a.Domain)
 
 			// Skip if host is empty
 			if host == "" {
@@ -382,7 +438,7 @@ PageLoop:
 				Labels:    labels,                      // 添加标签
 				IsHTTP:    a.Protocol == "http" || a.Protocol == "https",
 				// Map optional fields
-				Domain: a.Domain,
+				Domain: domain,
 				Server: a.Server,
 				Banner: a.Banner,
 				// Initialize default fields
@@ -403,9 +459,15 @@ PageLoop:
 			}
 		}
 
-		// 如果当前页返回的数据量小于 pageSize，说明已经是最后一页
-		// 注意：对于 Quake，配额用尽时会返回空数组，上面已经处理
-		if len(results) < pageSize {
+		// 判断是否还有更多数据
+		if hasAPITotal {
+			// Hunter/Quake 有总数，用总数判断
+			if totalFetched >= apiTotal {
+				break
+			}
+		} else if rawResultCount < pageSize {
+			// FOFA 没有总数字段，用 API 原始返回条数判断（而非解析后的条数，
+			// 因为 ParseResults 会过滤 len(row)<15 的行导致计数偏少）
 			break
 		}
 
@@ -413,9 +475,13 @@ PageLoop:
 	}
 
 	totalPages := currentPage
+	msg := fmt.Sprintf("成功导入 %d 条资产", totalImport)
+	if totalFetched > totalImport {
+		msg = fmt.Sprintf("成功导入 %d 条资产（共获取 %d 条，%d 条重复已合并）", totalImport, totalFetched, totalFetched-totalImport)
+	}
 	return &types.OnlineImportAllResp{
 		Code:         0,
-		Msg:          fmt.Sprintf("成功导入%d条资产（共获取%d条，%d页）", totalImport, totalFetched, totalPages),
+		Msg:          msg,
 		TotalFetched: totalFetched,
 		TotalImport:  totalImport,
 		TotalPages:   totalPages,
