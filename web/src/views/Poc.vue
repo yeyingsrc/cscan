@@ -631,145 +631,79 @@
     </el-dialog> 
 
     <!-- 导入POC对话框 -->
-    <el-dialog v-model="importPocDialogVisible" :title="$t('poc.importPocTitle')" width="900px">
-      <el-form label-width="100px">
-        <el-form-item :label="$t('poc.pocFormat')">
-          <el-radio-group v-model="importPocFormat" @change="handleImportFormatChange">
-            <el-radio-button value="nuclei">Nuclei</el-radio-button>
-            <el-radio-button value="xray">XRAY ({{ $t('poc.convertedToNuclei') }})</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item :label="$t('poc.importMethod')" v-if="importPocFormat === 'xray'">
-          <el-radio-group v-model="importPocType">
-            <el-radio-button value="text">{{ $t('poc.textPaste') }}</el-radio-button>
-            <el-radio-button value="file">{{ $t('poc.fileUpload') }}</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <!-- Nuclei格式：从本地文件夹导入 -->
-        <el-form-item v-if="importPocFormat === 'nuclei'" :label="$t('poc.selectFolder')">
-          <div style="width: 100%">
-            <el-button type="primary" @click="customPocFolderInputRef?.click()" :loading="importPocLoading">
-              <el-icon><FolderOpened /></el-icon>{{ $t('poc.selectLocalFolder') }}
-            </el-button>
-            <input 
-              ref="customPocFolderInputRef" 
-              type="file" 
-              webkitdirectory 
-              directory 
-              multiple 
-              style="display: none" 
-              @change="handleCustomPocFolderSelect"
-            />
-            <div class="text-muted hint-text" style="margin-top: 8px">
-              {{ $t('poc.folderSelectHint') }}
-            </div>
-            <div v-if="uploadedFileCount > 0" class="text-success" style="margin-top: 10px; font-size: 13px">
-              <el-icon><UploadFilled /></el-icon> {{ $t('poc.scannedFiles', { count: uploadedFileCount }) }}
-            </div>
-          </div>
-        </el-form-item>
-        <!-- XRAY格式：文本粘贴 -->
-        <el-form-item v-if="importPocFormat === 'xray' && importPocType === 'text'" :label="$t('poc.yamlContent')">
-          <div style="width: 100%">
-            <div class="text-muted hint-text">
-              {{ $t('poc.xrayPasteHint') }}
-            </div>
-            <div class="yaml-editor-wrapper">
-              <el-input
-                v-model="importPocContent"
-                type="textarea"
-                :rows="18"
-                :placeholder="$t('poc.pasteXrayContent')"
-                @input="parseImportContent"
-              />
-            </div>
-          </div>
-        </el-form-item>
-        <!-- XRAY格式：文件上传 -->
-        <el-form-item v-if="importPocFormat === 'xray' && importPocType === 'file'" :label="$t('poc.fileUpload')">
-          <div style="width: 100%">
-            <el-upload
-              ref="importPocUploadRef"
-              :auto-upload="false"
-              :limit="500"
-              accept=".yaml,.yml"
-              :on-change="handleImportFileChange"
-              :on-remove="handleImportFileRemove"
-              :before-upload="() => false"
-              multiple
-              drag
-              :show-file-list="false"
-            >
-              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-              <div class="el-upload__text">{{ $t('poc.uploadHint') }}</div>
-              <template #tip>
-                <div class="el-upload__tip">
-                  {{ $t('poc.uploadTip') }}
-                  <span class="text-warning">{{ $t('poc.xrayConvertNote') }}</span>
-                </div>
-              </template>
-            </el-upload>
-            <div v-if="uploadedFileCount > 0" class="text-success" style="margin-top: 10px; font-size: 13px">
-              <el-icon><UploadFilled /></el-icon> {{ $t('poc.uploadedFiles', { count: uploadedFileCount }) }}
-            </div>
-          </div>
-        </el-form-item>
-      </el-form>
-      
-      <!-- 解析预览（仅XRAY格式显示） -->
-      <div v-if="importPocFormat === 'xray' && importPocPreviews.length > 0" class="import-preview">
-        <div class="preview-header">
-          <span>{{ $t('poc.parsePreview') }} ({{ importPocPreviews.length }} POC)</span>
-          <el-tag type="warning" size="small" style="margin-left: 10px">{{ $t('poc.convertedToNuclei') }}</el-tag>
-          <el-checkbox v-model="importPocEnabled" style="margin-left: 15px">{{ $t('poc.enableAfterImport') }}</el-checkbox>
+    <el-dialog
+      v-model="importPocDialogVisible"
+      :title="$t('poc.importPocTitle')"
+      width="550px"
+      :close-on-click-modal="!importPocLoading"
+      :close-on-press-escape="!importPocLoading"
+      :show-close="!importPocLoading"
+    >
+      <!-- 导入中显示进度 -->
+      <div v-if="importPocLoading" class="download-progress">
+        <el-progress
+          :percentage="importPocProgress"
+          :status="importPocStatus === 'failed' ? 'exception' : (importPocStatus === 'completed' ? 'success' : '')"
+          :stroke-width="20"
+          striped
+          striped-flow
+        />
+        <div class="progress-info">
+          <span v-if="importPocStatus === 'extracting'">{{ $t('poc.extracting') }}</span>
+          <span v-else-if="importPocStatus === 'importing'">{{ $t('poc.importingPocs') }}</span>
+          <span v-else-if="importPocStatus === 'completed'">{{ $t('poc.importCompleted') }}</span>
+          <span v-else-if="importPocStatus === 'failed'" class="error-text">{{ importPocError }}</span>
+          <span v-if="uploadedFileCount > 0" class="template-count">
+            {{ $t('poc.scannedFiles', { count: uploadedFileCount }) }}
+          </span>
         </div>
-        <el-table :data="importPocPreviews" max-height="300" size="small">
-          <el-table-column prop="templateId" :label="$t('poc.templateId')" width="180" show-overflow-tooltip />
-          <el-table-column prop="name" :label="$t('poc.name')" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="severity" :label="$t('poc.level')" width="90">
-            <template #default="{ row }">
-              <el-tag :type="getSeverityType(row.severity)" size="small">{{ row.severity }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="author" :label="$t('poc.author')" width="100" show-overflow-tooltip />
-          <el-table-column prop="tags" :label="$t('poc.tags')" min-width="150">
-            <template #default="{ row }">
-              <el-tag v-for="tag in (row.tags || []).slice(0, 3)" :key="tag" size="small" style="margin-right: 3px">
-                {{ tag }}
-              </el-tag>
-              <span v-if="row.tags && row.tags.length > 3" class="text-muted">+{{ row.tags.length - 3 }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column :label="$t('poc.operation')" width="120">
-            <template #default="{ row, $index }">
-              <el-button type="primary" link size="small" @click="previewConvertedPoc(row)">{{ $t('poc.preview') }}</el-button>
-              <el-button type="danger" link size="small" @click="removeImportPreview($index)">{{ $t('poc.remove') }}</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
       </div>
-      
-      <template #footer>
-        <el-button @click="importPocDialogVisible = false">{{ $t('poc.cancel') }}</el-button>
-        <el-button v-if="importPocFormat === 'xray'" @click="clearImportContent">{{ $t('poc.clear') }}</el-button>
-        <el-button v-if="importPocFormat === 'xray'" type="primary" @click="handleImportPocs" :loading="importPocLoading" :disabled="importPocPreviews.length === 0">
-          {{ $t('poc.import') }} ({{ importPocPreviews.length }})
-        </el-button>
-      </template>
-    </el-dialog>
 
-    <!-- 预览转换后的POC对话框 -->
-    <el-dialog v-model="convertedPocPreviewVisible" :title="$t('poc.convertedPocPreview')" width="800px">
-      <el-input
-        v-model="convertedPocPreviewContent"
-        type="textarea"
-        :rows="25"
-        readonly
-        style="font-family: 'Consolas', 'Monaco', monospace; font-size: 13px"
-      />
+      <!-- 上传ZIP包 -->
+      <template v-else>
+        <div class="upload-section">
+          <el-checkbox v-model="importPocEnabled" style="margin-bottom: 12px">{{ $t('poc.enableAfterImport') }}</el-checkbox>
+          <el-upload
+            ref="importPocZipUploadRef"
+            drag
+            :auto-upload="false"
+            :limit="1"
+            accept=".zip"
+            :on-change="handleImportPocZipChange"
+            :on-exceed="handleImportPocZipExceed"
+          >
+            <el-icon class="el-icon--upload"><Upload /></el-icon>
+            <div class="el-upload__text">
+              {{ $t('poc.dragZipHere') }} <em>{{ $t('poc.clickToSelect') }}</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">
+                {{ $t('poc.pocZipTip') }}
+              </div>
+            </template>
+          </el-upload>
+          <div v-if="importPocZipFile" class="selected-file">
+            <el-tag type="success">{{ importPocZipFile.name }} ({{ formatFileSize(importPocZipFile.size) }})</el-tag>
+          </div>
+        </div>
+      </template>
+
       <template #footer>
-        <el-button @click="convertedPocPreviewVisible = false">{{ $t('poc.close') }}</el-button>
-        <el-button type="primary" @click="copyConvertedPoc">{{ $t('poc.copyContent') }}</el-button>
+        <template v-if="importPocStatus === 'completed'">
+          <el-button type="primary" @click="handleImportPocComplete">{{ $t('poc.done') }}</el-button>
+        </template>
+        <template v-else-if="importPocStatus === 'failed'">
+          <el-button @click="resetImportPocDialog">{{ $t('poc.retry') }}</el-button>
+        </template>
+        <template v-else-if="!importPocLoading">
+          <el-button @click="importPocDialogVisible = false">{{ $t('poc.cancel') }}</el-button>
+          <el-button type="primary" @click="handleImportPocZip" :disabled="!importPocZipFile">
+            {{ $t('poc.startImport') }}
+          </el-button>
+        </template>
+        <template v-else>
+          <el-button disabled>{{ $t('poc.processing') }}...</el-button>
+        </template>
       </template>
     </el-dialog>
 
@@ -1422,17 +1356,14 @@ const customPocFilter = reactive({
 
 // 导入POC
 const importPocDialogVisible = ref(false)
-const importPocType = ref('text')
-const importPocFormat = ref('nuclei') // nuclei 或 xray
-const importPocContent = ref('')
-const importPocPreviews = ref([])
 const importPocEnabled = ref(true)
 const importPocLoading = ref(false)
 const uploadedFileCount = ref(0)
-const importPocUploadRef = ref(null)
-const customPocFolderInputRef = ref(null)
-const convertedPocPreviewVisible = ref(false)
-const convertedPocPreviewContent = ref('')
+const importPocZipFile = ref(null)
+const importPocZipUploadRef = ref(null)
+const importPocProgress = ref(0)
+const importPocStatus = ref('') // extracting/importing/completed/failed
+const importPocError = ref('')
 const exportPocLoading = ref(false)
 const clearPocLoading = ref(false)
 const customPocFormRef = ref()
@@ -1950,6 +1881,30 @@ async function showTemplateContent(row) {
   templateContentDialogVisible.value = true
 }
 
+function fallbackCopyToClipboard(text) {
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-999999px'
+    textarea.style.top = '-999999px'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textarea)
+
+    if (successful) {
+      ElMessage.success(t('poc.copiedToClipboard'))
+    } else {
+      ElMessage.error(t('poc.copyFailed'))
+    }
+  } catch (err) {
+    console.error('复制失败:', err)
+    ElMessage.error(t('poc.copyFailed'))
+  }
+}
+
 function copyTemplateContent() {
   if (currentTemplate.value.content) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2331,144 +2286,175 @@ async function handleClearAllPocs() {
 
 // 显示导入对话框
 function showImportPocDialog() {
-  importPocType.value = 'text'
-  importPocFormat.value = 'nuclei'
-  importPocContent.value = ''
-  importPocPreviews.value = []
   importPocEnabled.value = true
   uploadedFileCount.value = 0
+  importPocZipFile.value = null
+  importPocProgress.value = 0
+  importPocStatus.value = ''
+  importPocError.value = ''
+  importPocLoading.value = false
   importPocDialogVisible.value = true
 }
 
-// 处理导入格式切换
-function handleImportFormatChange() {
-  // 切换格式时清空预览
-  importPocPreviews.value = []
-  importPocContent.value = ''
+// 处理ZIP文件选择
+function handleImportPocZipChange(file) {
+  if (file.raw.type !== 'application/zip' && !file.name.endsWith('.zip')) {
+    ElMessage.error(t('poc.onlyZipAllowed'))
+    importPocZipUploadRef.value?.clearFiles()
+    importPocZipFile.value = null
+    return
+  }
+  importPocZipFile.value = file.raw
+}
+
+function handleImportPocZipExceed() {
+  ElMessage.warning(t('poc.onlyOneFile'))
+}
+
+// 重置导入对话框
+function resetImportPocDialog() {
+  importPocZipFile.value = null
+  importPocProgress.value = 0
+  importPocStatus.value = ''
+  importPocError.value = ''
+  importPocLoading.value = false
   uploadedFileCount.value = 0
-  if (importPocUploadRef.value) {
-    importPocUploadRef.value.clearFiles()
+  if (importPocZipUploadRef.value) {
+    importPocZipUploadRef.value.clearFiles()
   }
 }
 
-// 处理自定义POC文件夹选择（Nuclei格式，直接导入）
-async function handleCustomPocFolderSelect(event) {
-  const files = event.target.files
-  if (!files || files.length === 0) return
-  
-  // 筛选 .yaml 和 .yml 文件
-  const yamlFiles = Array.from(files).filter(file => {
-    const name = file.name.toLowerCase()
-    return (name.endsWith('.yaml') || name.endsWith('.yml')) && !file.webkitRelativePath.includes('/.git/')
-  })
-  
-  if (yamlFiles.length === 0) {
-    ElMessage.warning('未找到有效的模板文件（.yaml/.yml）')
-    event.target.value = ''
-    return
-  }
-  
-  ElMessage.info(`正在导入 ${yamlFiles.length} 个模板文件...`)
-  uploadedFileCount.value = yamlFiles.length
+// 导入完成
+function handleImportPocComplete() {
+  importPocDialogVisible.value = false
+  loadCustomPocs()
+}
+
+// 上传ZIP包并解析导入
+async function handleImportPocZip() {
+  if (!importPocZipFile.value) return
+
   importPocLoading.value = true
-  
-  const pocsToImport = []
-  const seenTemplateIds = new Set()
-  const seenContents = new Set()
-  
-  for (const file of yamlFiles) {
-    try {
-      const content = await readFileContent(file)
-      if (!content || content.trim().length === 0) continue
-      
-      const parsed = parseYamlToPreview(content)
-      if (parsed) {
-        // 检查是否已存在相同templateId或相同内容
-        const contentHash = parsed.content.trim()
-        if (!seenTemplateIds.has(parsed.templateId) && !seenContents.has(contentHash)) {
-          seenTemplateIds.add(parsed.templateId)
-          seenContents.add(contentHash)
-          pocsToImport.push({
-            name: parsed.name,
-            templateId: parsed.templateId,
-            severity: parsed.severity,
-            tags: parsed.tags,
-            author: parsed.author,
-            description: parsed.description,
-            content: parsed.content,
-            enabled: importPocEnabled.value
-          })
-        }
-      }
-    } catch (e) {
-      console.error('读取文件失败:', file.name, e)
-    }
-  }
-  
-  if (pocsToImport.length === 0) {
-    ElMessage.warning('未能解析任何有效的POC文件')
-    importPocLoading.value = false
-    event.target.value = ''
-    return
-  }
-  
-  // 直接批量导入
+  importPocStatus.value = 'extracting'
+  importPocProgress.value = 10
+
   try {
-    const res = await batchImportCustomPoc({ pocs: pocsToImport })
-    
-    if (res.code === 0) {
-      const successCount = res.imported || pocsToImport.length
-      const failCount = res.failed || 0
-      ElMessage.success(res.msg || `成功导入 ${successCount} 个POC${failCount > 0 ? `，${failCount} 个失败` : ''}`)
+    const zip = await JSZip.loadAsync(importPocZipFile.value)
+    importPocProgress.value = 30
+
+    // 查找所有yaml文件
+    const yamlFiles = []
+    const filePromises = []
+
+    zip.forEach((relativePath, zipEntry) => {
+      if (!zipEntry.dir && (relativePath.endsWith('.yaml') || relativePath.endsWith('.yml'))) {
+        // 跳过隐藏文件和特殊目录
+        if (relativePath.includes('/.') || relativePath.startsWith('.')) return
+        filePromises.push(
+          zipEntry.async('string').then(content => {
+            yamlFiles.push({ path: relativePath, content })
+          })
+        )
+      }
+    })
+
+    await Promise.all(filePromises)
+    importPocProgress.value = 50
+    uploadedFileCount.value = yamlFiles.length
+
+    if (yamlFiles.length === 0) {
+      importPocStatus.value = 'failed'
+      importPocError.value = t('poc.noPocsInZip')
+      importPocLoading.value = false
+      return
+    }
+
+    // 解析并去重
+    const pocsToImport = []
+    const seenTemplateIds = new Set()
+    const seenContents = new Set()
+
+    for (const file of yamlFiles) {
+      try {
+        if (!file.content || file.content.trim().length === 0) continue
+
+        const parsed = parseYamlToPreview(file.content)
+        if (parsed) {
+          const contentHash = parsed.content.trim()
+          if (!seenTemplateIds.has(parsed.templateId) && !seenContents.has(contentHash)) {
+            seenTemplateIds.add(parsed.templateId)
+            seenContents.add(contentHash)
+            pocsToImport.push({
+              name: parsed.name,
+              templateId: parsed.templateId,
+              severity: parsed.severity,
+              tags: parsed.tags,
+              author: parsed.author,
+              description: parsed.description,
+              content: parsed.content,
+              enabled: importPocEnabled.value
+            })
+          }
+        }
+      } catch (e) {
+        console.error('解析文件失败:', file.path, e)
+      }
+    }
+
+    if (pocsToImport.length === 0) {
+      importPocStatus.value = 'failed'
+      importPocError.value = t('poc.noPocsInZip')
+      importPocLoading.value = false
+      return
+    }
+
+    // 分批导入
+    importPocStatus.value = 'importing'
+    importPocProgress.value = 60
+
+    const batchSize = 200
+    let successCount = 0
+    let failCount = 0
+
+    for (let i = 0; i < pocsToImport.length; i += batchSize) {
+      const batch = pocsToImport.slice(i, i + batchSize)
+      try {
+        const res = await batchImportCustomPoc({ pocs: batch })
+        if (res.code === 0) {
+          successCount += res.imported || batch.length
+          failCount += res.failed || 0
+        } else {
+          failCount += batch.length
+        }
+      } catch (e) {
+        failCount += batch.length
+        console.error('批量导入失败:', e)
+      }
+      importPocProgress.value = 60 + Math.floor(((i + batch.length) / pocsToImport.length) * 35)
+    }
+
+    importPocProgress.value = 100
+    uploadedFileCount.value = successCount
+
+    if (successCount > 0) {
+      importPocStatus.value = 'completed'
+      importPocLoading.value = false
+      // 导入成功后自动关闭对话框并刷新列表
       importPocDialogVisible.value = false
       loadCustomPocs()
+      ElMessage.success(t('poc.importComplete', { success: successCount, failed: failCount }))
     } else {
-      ElMessage.error(res.msg || '导入失败')
+      importPocStatus.value = 'failed'
+      importPocError.value = t('poc.importFailed')
+      importPocLoading.value = false
     }
-  } catch (e) {
-    console.error('批量导入失败:', e)
-    ElMessage.error('导入失败: ' + e.message)
-  } finally {
-    importPocLoading.value = false
-    event.target.value = '' // 清空input以便重复选择
-  }
-}
 
-// 解析导入的YAML内容
-function parseImportContent() {
-  if (!importPocContent.value.trim()) {
-    importPocPreviews.value = []
-    return
+  } catch (error) {
+    console.error('解析ZIP失败:', error)
+    importPocStatus.value = 'failed'
+    importPocError.value = t('poc.zipParseFailed') + ': ' + (error.message || '')
+    importPocLoading.value = false
   }
-  
-  // 支持多个POC用 --- 分隔
-  const yamlDocs = importPocContent.value.split(/\n---\s*\n/)
-  const previews = []
-  const seenTemplateIds = new Set()
-  const seenContents = new Set()
-  
-  for (const doc of yamlDocs) {
-    const trimmedDoc = doc.trim()
-    if (!trimmedDoc) continue
-    
-    let parsed
-    if (importPocFormat.value === 'xray') {
-      parsed = parseXrayToNuclei(trimmedDoc)
-    } else {
-      parsed = parseYamlToPreview(trimmedDoc)
-    }
-    if (parsed) {
-      // 检查是否已存在相同templateId或相同内容
-      const contentHash = parsed.content.trim()
-      if (!seenTemplateIds.has(parsed.templateId) && !seenContents.has(contentHash)) {
-        seenTemplateIds.add(parsed.templateId)
-        seenContents.add(contentHash)
-        previews.push(parsed)
-      }
-    }
-  }
-  
-  importPocPreviews.value = previews
 }
 
 // 解析单个YAML文档为预览对象
@@ -2482,30 +2468,30 @@ function parseYamlToPreview(content) {
     tags: [],
     content: content
   }
-  
+
   // 解析 id 字段
   const idMatch = content.match(/^id:\s*(.+)$/m)
   if (idMatch) {
     result.templateId = idMatch[1].trim()
   }
-  
+
   // 解析 info 块中的字段
   const infoMatch = content.match(/info:\s*\n((?:\s+.+\n?)+)/m)
   if (infoMatch) {
     const infoBlock = infoMatch[1]
-    
+
     // name
     const nameMatch = infoBlock.match(/^\s+name:\s*(.+)$/m)
     if (nameMatch) {
       result.name = nameMatch[1].trim()
     }
-    
+
     // author
     const authorMatch = infoBlock.match(/^\s+author:\s*(.+)$/m)
     if (authorMatch) {
       result.author = authorMatch[1].trim()
     }
-    
+
     // severity
     const severityMatch = infoBlock.match(/^\s+severity:\s*(.+)$/m)
     if (severityMatch) {
@@ -2514,7 +2500,7 @@ function parseYamlToPreview(content) {
         result.severity = severity
       }
     }
-    
+
     // description (支持多行)
     const descMatch = infoBlock.match(/^\s+description:\s*\|?\s*\n?((?:\s{4,}.+\n?)*)/m)
     if (descMatch && descMatch[1]) {
@@ -2525,7 +2511,7 @@ function parseYamlToPreview(content) {
         result.description = descSimpleMatch[1].trim()
       }
     }
-    
+
     // tags
     const tagsMatch = infoBlock.match(/^\s+tags:\s*(.+)$/m)
     if (tagsMatch) {
@@ -2533,699 +2519,18 @@ function parseYamlToPreview(content) {
       result.tags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
     }
   }
-  
+
   // 如果没有解析到必要字段，返回null
   if (!result.templateId && !result.name) {
     return null
   }
-  
+
   // 如果没有name，使用templateId
   if (!result.name) {
     result.name = result.templateId
   }
-  
+
   return result
-}
-
-// ==================== XRAY POC 转 Nuclei POC ====================
-
-// 解析 XRAY POC 并转换为 Nuclei 格式
-function parseXrayToNuclei(xrayContent) {
-  try {
-    // 解析 XRAY POC 的基本信息
-    const xrayPoc = parseXrayPoc(xrayContent)
-    if (!xrayPoc) {
-      console.warn('Failed to parse XRAY POC')
-      return null
-    }
-    
-    // 转换为 Nuclei 格式
-    const nucleiContent = convertToNucleiFormat(xrayPoc)
-    
-    // 从 vulnerability.level 获取严重级别
-    const severity = xrayPoc.detail?.vulnerability?.level || xrayPoc.detail?.severity || 'medium'
-    
-    return {
-      templateId: xrayPoc.name || 'xray-converted-poc',
-      name: xrayPoc.detail?.name || xrayPoc.name || 'Converted POC',
-      author: xrayPoc.detail?.author || 'xray-converter',
-      severity: mapXraySeverity(severity),
-      description: xrayPoc.detail?.description || '',
-      tags: extractXrayTags(xrayPoc),
-      content: nucleiContent
-    }
-  } catch (e) {
-    console.error('XRAY to Nuclei conversion error:', e)
-    return null
-  }
-}
-
-// 解析 XRAY POC 结构
-function parseXrayPoc(content) {
-  const poc = {
-    name: '',
-    transport: 'http',
-    set: {},
-    rules: {},
-    expression: '',
-    detail: {
-      author: '',
-      links: [],
-      vulnerability: { id: '', level: '' }
-    }
-  }
-  
-  // 使用 js-yaml 解析更可靠
-  try {
-    const yaml = jsYaml.load(content)
-    if (!yaml) return null
-    
-    poc.name = yaml.name || ''
-    poc.transport = yaml.transport || 'http'
-    
-    // 解析 set 变量
-    if (yaml.set) {
-      poc.set = yaml.set
-    }
-    
-    // 解析 detail
-    if (yaml.detail) {
-      poc.detail.author = yaml.detail.author || ''
-      poc.detail.links = yaml.detail.links || []
-      if (yaml.detail.vulnerability) {
-        poc.detail.vulnerability = {
-          id: yaml.detail.vulnerability.id || '',
-          level: yaml.detail.vulnerability.level || 'medium'
-        }
-      }
-    }
-    
-    // 解析 rules
-    if (yaml.rules) {
-      for (const [ruleName, ruleData] of Object.entries(yaml.rules)) {
-        const rule = {
-          request: { method: 'GET', path: '/', headers: {}, body: '' },
-          expression: ''
-        }
-        
-        if (ruleData.request) {
-          rule.request.method = ruleData.request.method || 'GET'
-          rule.request.path = ruleData.request.path || '/'
-          rule.request.headers = ruleData.request.headers || {}
-          rule.request.body = ruleData.request.body || ''
-        }
-        
-        rule.expression = ruleData.expression || ''
-        poc.rules[ruleName] = rule
-      }
-    }
-    
-    // 解析顶层 expression
-    poc.expression = yaml.expression || ''
-    
-    if (!poc.name && Object.keys(poc.rules).length === 0) {
-      return null
-    }
-    
-    return poc
-  } catch (e) {
-    console.error('YAML parse error:', e)
-    return null
-  }
-}
-
-// 解析 XRAY rules (保留作为备用，主要使用 YAML 解析)
-function parseXrayRules(rulesContent) {
-  const rules = {}
-  
-  // 匹配每个规则块 - XRAY 使用 4 空格缩进
-  const ruleMatches = rulesContent.matchAll(/^[ ]{4}(\w+):\s*\n((?:[ ]{6,}.+\n?)+)/gm)
-  
-  for (const match of ruleMatches) {
-    const ruleName = match[1]
-    const ruleContent = match[2]
-    
-    const rule = {
-      request: { method: 'GET', path: '/', headers: {}, body: '' },
-      expression: ''
-    }
-    
-    // 解析 request
-    const requestMatch = ruleContent.match(/request:\s*\n((?:\s+.+\n?)+?)(?=\s+expression:|$)/m)
-    if (requestMatch) {
-      const reqBlock = requestMatch[1]
-      
-      const methodMatch = reqBlock.match(/method:\s*(.+)/m)
-      if (methodMatch) rule.request.method = methodMatch[1].trim()
-      
-      const pathMatch = reqBlock.match(/path:\s*(.+)/m)
-      if (pathMatch) rule.request.path = pathMatch[1].trim().replace(/^["']|["']$/g, '')
-      
-      const headersMatch = reqBlock.match(/headers:\s*\n((?:\s+.+:\s*.+\n?)+)/m)
-      if (headersMatch) {
-        const headerLines = headersMatch[1].match(/^\s+(.+?):\s*(.+)$/gm)
-        if (headerLines) {
-          for (const line of headerLines) {
-            const hMatch = line.match(/^\s+(.+?):\s*(.+)$/)
-            if (hMatch) {
-              rule.request.headers[hMatch[1].trim()] = hMatch[2].trim().replace(/^["']|["']$/g, '')
-            }
-          }
-        }
-      }
-      
-      const bodyMatch = reqBlock.match(/body:\s*\|?\s*\n?([\s\S]*?)(?=\n\s+\w+:|$)/m)
-      if (bodyMatch) {
-        rule.request.body = bodyMatch[1].trim().replace(/^["']|["']$/g, '')
-      } else {
-        const simpleBodyMatch = reqBlock.match(/body:\s*(.+)$/m)
-        if (simpleBodyMatch) rule.request.body = simpleBodyMatch[1].trim().replace(/^["']|["']$/g, '')
-      }
-    }
-    
-    // 解析 expression
-    const exprMatch = ruleContent.match(/expression:\s*(.+)/m)
-    if (exprMatch) rule.expression = exprMatch[1].trim()
-    
-    rules[ruleName] = rule
-  }
-  
-  return rules
-}
-
-// 转换为 Nuclei 格式
-function convertToNucleiFormat(xrayPoc) {
-  const lines = []
-  
-  // ID
-  lines.push(`id: ${xrayPoc.name || 'converted-poc'}`)
-  lines.push('')
-  
-  // Info 块
-  lines.push('info:')
-  lines.push(`  name: ${xrayPoc.detail?.name || xrayPoc.name || 'Converted POC'}`)
-  lines.push(`  author: ${xrayPoc.detail?.author || 'xray-converter'}`)
-  
-  // 从 vulnerability.level 获取严重级别
-  const severity = xrayPoc.detail?.vulnerability?.level || xrayPoc.detail?.severity || 'medium'
-  lines.push(`  severity: ${mapXraySeverity(severity)}`)
-  
-  if (xrayPoc.detail?.description) {
-    lines.push(`  description: ${xrayPoc.detail.description}`)
-  }
-  
-  // Tags
-  const tags = extractXrayTags(xrayPoc)
-  if (tags.length > 0) {
-    lines.push(`  tags: ${tags.join(',')}`)
-  }
-  
-  // Reference links
-  if (xrayPoc.detail?.links && xrayPoc.detail.links.length > 0) {
-    lines.push('  reference:')
-    for (const link of xrayPoc.detail.links) {
-      lines.push(`    - ${link}`)
-    }
-  }
-  
-  lines.push('')
-  
-  // HTTP requests
-  const ruleNames = Object.keys(xrayPoc.rules)
-  if (ruleNames.length > 0) {
-    lines.push('http:')
-    
-    for (const ruleName of ruleNames) {
-      const rule = xrayPoc.rules[ruleName]
-      
-      // 使用 raw 请求格式
-      lines.push('  - raw:')
-      lines.push('      - |')
-      
-      // 构建 raw HTTP 请求
-      const method = rule.request.method || 'GET'
-      const path = convertXrayPath(rule.request.path, xrayPoc.set)
-      lines.push(`        ${method} ${path} HTTP/1.1`)
-      lines.push('        Host: {{Hostname}}')
-      
-      // Headers
-      for (const [key, value] of Object.entries(rule.request.headers || {})) {
-        if (key.toLowerCase() !== 'host') {
-          const convertedValue = convertXrayVariables(value, xrayPoc.set)
-          lines.push(`        ${key}: ${convertedValue}`)
-        }
-      }
-      
-      // Body
-      if (rule.request.body) {
-        lines.push('')
-        const bodyContent = convertXrayVariables(rule.request.body, xrayPoc.set)
-        // 处理多行 body
-        const bodyLines = bodyContent.split('\n')
-        for (const bodyLine of bodyLines) {
-          lines.push(`        ${bodyLine.trim()}`)
-        }
-      }
-      
-      lines.push('')
-      
-      // Matchers
-      const matchers = convertXrayExpression(rule.expression)
-      if (matchers.length > 0) {
-        lines.push('    matchers-condition: and')
-        lines.push('    matchers:')
-        for (const matcher of matchers) {
-          lines.push(`      - type: ${matcher.type}`)
-          if (matcher.part) {
-            lines.push(`        part: ${matcher.part}`)
-          }
-          if (matcher.words) {
-            lines.push('        words:')
-            for (const word of matcher.words) {
-              lines.push(`          - "${word}"`)
-            }
-          }
-          if (matcher.regex) {
-            lines.push('        regex:')
-            for (const r of matcher.regex) {
-              lines.push(`          - "${r}"`)
-            }
-          }
-          if (matcher.status) {
-            lines.push('        status:')
-            for (const s of matcher.status) {
-              lines.push(`          - ${s}`)
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  return lines.join('\n')
-}
-
-// 转换 XRAY 路径变量
-function convertXrayPath(path, setVars) {
-  if (!path) return '/'
-  
-  let result = path
-  // 替换 {{变量}} 为 Nuclei 格式
-  result = result.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
-    if (setVars && setVars[varName]) {
-      // 如果是 randomInt 等函数，转换为 Nuclei 格式
-      const value = setVars[varName]
-      if (value.includes('randomInt')) {
-        return '{{rand_int(1000, 9999)}}'
-      }
-      if (value.includes('randomLowercase')) {
-        return '{{rand_base(8)}}'
-      }
-      return `{{${varName}}}`
-    }
-    return match
-  })
-  
-  return result
-}
-
-// 转换 XRAY 变量
-function convertXrayVariables(str, setVars) {
-  if (!str) return str
-  
-  let result = str
-  result = result.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
-    if (setVars && setVars[varName]) {
-      const value = setVars[varName]
-      if (value.includes('randomInt')) {
-        return '{{rand_int(1000, 9999)}}'
-      }
-      if (value.includes('randomLowercase')) {
-        return '{{rand_base(8)}}'
-      }
-    }
-    return match
-  })
-  
-  return result
-}
-
-// 转换 XRAY expression 为 Nuclei matchers
-function convertXrayExpression(expression) {
-  const matchers = []
-  
-  if (!expression) return matchers
-  
-  // 解析 response.status == xxx
-  const statusMatch = expression.match(/response\.status\s*==\s*(\d+)/g)
-  if (statusMatch) {
-    const statuses = statusMatch.map(m => {
-      const match = m.match(/(\d+)/)
-      return match ? parseInt(match[1]) : null
-    }).filter(s => s !== null)
-    
-    if (statuses.length > 0) {
-      matchers.push({
-        type: 'status',
-        status: statuses
-      })
-    }
-  }
-  
-  // 解析 response.body.bcontains(b"xxx") 或 response.body.contains("xxx")
-  const bodyContainsMatch = expression.match(/response\.body\.b?contains\s*\(\s*b?["']([^"']+)["']\s*\)/g)
-  if (bodyContainsMatch) {
-    const words = bodyContainsMatch.map(m => {
-      const match = m.match(/\(\s*b?["']([^"']+)["']\s*\)/)
-      return match ? match[1] : null
-    }).filter(w => w !== null)
-    
-    if (words.length > 0) {
-      matchers.push({
-        type: 'word',
-        part: 'body',
-        words: words
-      })
-    }
-  }
-  
-  // 解析 response.headers["xxx"].contains("xxx") 或 response.headers[xxx].startsWith(xxx)
-  const headerMatch = expression.match(/response\.headers\[["']?(\w+)["']?\]\.(contains|startsWith)\s*\(\s*["']?([^)"']+)["']?\s*\)/g)
-  if (headerMatch) {
-    const words = headerMatch.map(m => {
-      const match = m.match(/\.(contains|startsWith)\s*\(\s*["']?([^)"']+)["']?\s*\)/)
-      return match ? match[2] : null
-    }).filter(w => w !== null && !w.match(/^\w+$/)) // 排除变量名
-    
-    if (words.length > 0) {
-      matchers.push({
-        type: 'word',
-        part: 'header',
-        words: words
-      })
-    }
-  }
-  
-  // 解析 response.body.bmatches(xxx) 或 "xxx".bmatches(response.body) - 正则匹配
-  const regexMatch = expression.match(/(?:response\.body\.b?matches\s*\(\s*["']([^"']+)["']\s*\)|["']([^"']+)["']\.b?matches\s*\(\s*response\.body\s*\))/g)
-  if (regexMatch) {
-    const regexes = regexMatch.map(m => {
-      const match = m.match(/["']([^"']+)["']/)
-      return match ? match[1] : null
-    }).filter(r => r !== null)
-    
-    if (regexes.length > 0) {
-      matchers.push({
-        type: 'regex',
-        part: 'body',
-        regex: regexes
-      })
-    }
-  }
-  
-  // 如果没有解析到任何 matcher，添加一个默认的
-  if (matchers.length === 0) {
-    matchers.push({
-      type: 'status',
-      status: [200]
-    })
-  }
-  
-  return matchers
-}
-
-// 映射 XRAY 严重级别到 Nuclei
-function mapXraySeverity(xraySeverity) {
-  if (!xraySeverity) return 'medium'
-  
-  const severityMap = {
-    'critical': 'critical',
-    'high': 'high',
-    'medium': 'medium',
-    'low': 'low',
-    'info': 'info',
-    'informational': 'info'
-  }
-  
-  return severityMap[xraySeverity.toLowerCase()] || 'medium'
-}
-
-// 从 XRAY POC 提取标签
-function extractXrayTags(xrayPoc) {
-  const tags = ['xray-converted']
-  
-  // 从 name 中提取可能的标签
-  if (xrayPoc.name) {
-    const name = xrayPoc.name.toLowerCase()
-    
-    // 常见漏洞类型
-    if (name.includes('rce') || name.includes('command')) tags.push('rce')
-    if (name.includes('sqli') || name.includes('sql-injection') || name.includes('sql_injection')) tags.push('sqli')
-    if (name.includes('xss')) tags.push('xss')
-    if (name.includes('ssrf')) tags.push('ssrf')
-    if (name.includes('lfi') || name.includes('file-read') || name.includes('readfile')) tags.push('lfi')
-    if (name.includes('rfi')) tags.push('rfi')
-    if (name.includes('xxe')) tags.push('xxe')
-    if (name.includes('upload') || name.includes('writefile')) tags.push('fileupload')
-    if (name.includes('unauth') || name.includes('bypass') || name.includes('unauthorized')) tags.push('unauth')
-    if (name.includes('disclosure') || name.includes('leak')) tags.push('exposure')
-    if (name.includes('deserialization')) tags.push('deserialization')
-    if (name.includes('directory_traversal') || name.includes('path-traversal')) tags.push('traversal')
-    
-    // CVE
-    const cveMatch = name.match(/cve-\d{4}-\d+/i)
-    if (cveMatch) tags.push(cveMatch[0].toLowerCase())
-    
-    // CNVD
-    const cnvdMatch = name.match(/cnvd-\d{4}-\d+/i)
-    if (cnvdMatch) tags.push(cnvdMatch[0].toLowerCase())
-  }
-  
-  // 从 vulnerability id 提取
-  if (xrayPoc.detail?.vulnerability?.id) {
-    const vulnId = xrayPoc.detail.vulnerability.id
-    // CT-xxx 格式
-    if (vulnId.startsWith('CT-')) {
-      tags.push(vulnId.toLowerCase())
-    }
-    // CVE 格式
-    if (vulnId.toLowerCase().startsWith('cve-')) {
-      tags.push(vulnId.toLowerCase())
-    }
-  }
-  
-  return [...new Set(tags)] // 去重
-}
-
-// 预览转换后的 POC
-function previewConvertedPoc(poc) {
-  convertedPocPreviewContent.value = poc.content
-  convertedPocPreviewVisible.value = true
-}
-
-// 复制转换后的 POC
-function copyConvertedPoc() {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(convertedPocPreviewContent.value).then(() => {
-      ElMessage.success(t('poc.copiedToClipboard'))
-    }).catch(() => {
-      fallbackCopyToClipboard(convertedPocPreviewContent.value)
-    })
-  } else {
-    fallbackCopyToClipboard(convertedPocPreviewContent.value)
-  }
-}
-
-function fallbackCopyToClipboard(text) {
-  try {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.left = '-999999px'
-    textarea.style.top = '-999999px'
-    document.body.appendChild(textarea)
-    textarea.focus()
-    textarea.select()
-    const successful = document.execCommand('copy')
-    document.body.removeChild(textarea)
-    
-    if (successful) {
-      ElMessage.success(t('poc.copiedToClipboard'))
-    } else {
-      ElMessage.error(t('poc.importFailed'))
-    }
-  } catch (err) {
-    console.error('复制失败:', err)
-    ElMessage.error(t('poc.importFailed'))
-  }
-}
-
-// 处理文件上传
-function handleImportFileChange(uploadFile, uploadFiles) {
-  // uploadFile 是当前变化的文件，uploadFiles 是所有文件列表
-  console.log('File change:', uploadFile?.name, 'Total files:', uploadFiles?.length)
-  
-  if (!uploadFile || !uploadFile.raw) {
-    console.warn('No file or raw data')
-    return
-  }
-  
-  // 检查文件类型
-  const fileName = uploadFile.name.toLowerCase()
-  if (!fileName.endsWith('.yaml') && !fileName.endsWith('.yml')) {
-    ElMessage.warning(`文件 ${uploadFile.name} 不是YAML文件，已跳过`)
-    return
-  }
-  
-  // 检查文件是否已处理过（通过标记）
-  if (uploadFile._processed) {
-    return
-  }
-  uploadFile._processed = true
-  uploadedFileCount.value++
-  
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const content = e.target.result
-    console.log('File content loaded:', uploadFile.name, 'Length:', content?.length)
-    
-    if (!content || content.trim().length === 0) {
-      ElMessage.warning(`文件 ${uploadFile.name} 内容为空`)
-      return
-    }
-    
-    let parsed
-    if (importPocFormat.value === 'xray') {
-      parsed = parseXrayToNuclei(content)
-    } else {
-      parsed = parseYamlToPreview(content)
-    }
-    
-    if (parsed) {
-      // 检查是否已存在相同templateId或相同内容
-      const existsByTemplateId = importPocPreviews.value.some(p => p.templateId === parsed.templateId)
-      const existsByContent = importPocPreviews.value.some(p => p.content.trim() === parsed.content.trim())
-      
-      if (!existsByTemplateId && !existsByContent) {
-        importPocPreviews.value.push(parsed)
-        console.log('Added POC:', parsed.templateId)
-      } else {
-        console.log(`模板 ${parsed.templateId} 已存在（ID或内容重复），已跳过`)
-      }
-    } else {
-      ElMessage.warning(`文件 ${uploadFile.name} 解析失败，请检查格式`)
-    }
-  }
-  reader.onerror = (err) => {
-    console.error('File read error:', err)
-    ElMessage.error(`文件 ${uploadFile.name} 读取失败`)
-  }
-  reader.readAsText(uploadFile.raw)
-}
-
-// 处理文件移除
-function handleImportFileRemove(file) {
-  // 文件移除时不做处理，预览列表由用户手动管理
-}
-
-// 移除预览项
-function removeImportPreview(index) {
-  importPocPreviews.value.splice(index, 1)
-}
-
-// 清空导入内容
-function clearImportContent() {
-  importPocContent.value = ''
-  importPocPreviews.value = []
-  uploadedFileCount.value = 0
-  if (importPocUploadRef.value) {
-    importPocUploadRef.value.clearFiles()
-  }
-}
-
-// 执行导入
-async function handleImportPocs() {
-  if (importPocPreviews.value.length === 0) {
-    ElMessage.warning('没有可导入的POC')
-    return
-  }
-  
-  importPocLoading.value = true
-  
-  try {
-    // 准备批量导入数据
-    const pocs = importPocPreviews.value.map(poc => ({
-      name: poc.name,
-      templateId: poc.templateId,
-      severity: poc.severity,
-      tags: poc.tags,
-      author: poc.author,
-      description: poc.description,
-      content: poc.content,
-      enabled: importPocEnabled.value
-    }))
-    
-    // 尝试批量导入
-    const res = await batchImportCustomPoc({ pocs })
-    
-    if (res.code === 0) {
-      const successCount = res.imported || pocs.length
-      const failCount = res.failed || 0
-      ElMessage.success(`成功导入 ${successCount} 个POC${failCount > 0 ? `，${failCount} 个失败` : ''}`)
-      importPocDialogVisible.value = false
-      loadCustomPocs()
-    } else {
-      // 批量导入失败，回退到逐个导入
-      console.warn('批量导入API失败，回退到逐个导入:', res.msg)
-      await fallbackSingleImport()
-    }
-  } catch (e) {
-    // API不存在或出错，回退到逐个导入
-    console.warn('批量导入API异常，回退到逐个导入:', e)
-    await fallbackSingleImport()
-  } finally {
-    importPocLoading.value = false
-  }
-}
-
-// 回退到逐个导入
-async function fallbackSingleImport() {
-  let successCount = 0
-  let failCount = 0
-  
-  for (const poc of importPocPreviews.value) {
-    const submitData = {
-      name: poc.name,
-      templateId: poc.templateId,
-      severity: poc.severity,
-      tags: poc.tags,
-      author: poc.author,
-      description: poc.description,
-      content: poc.content,
-      enabled: importPocEnabled.value
-    }
-    
-    try {
-      const res = await saveCustomPoc(submitData)
-      if (res.code === 0) {
-        successCount++
-      } else {
-        failCount++
-        console.error(`导入 ${poc.templateId} 失败:`, res.msg)
-      }
-    } catch (e) {
-      failCount++
-      console.error(`导入 ${poc.templateId} 失败:`, e)
-    }
-  }
-  
-  if (successCount > 0) {
-    ElMessage.success(`成功导入 ${successCount} 个POC${failCount > 0 ? `，${failCount} 个失败` : ''}`)
-    importPocDialogVisible.value = false
-    loadCustomPocs()
-  } else {
-    ElMessage.error('导入失败')
-  }
 }
 
 // ==================== 导入POC相关函数结束 ====================
