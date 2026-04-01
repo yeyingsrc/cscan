@@ -101,6 +101,14 @@ func (l *SaveVulResultLogic) SaveVulResult(in *pb.SaveVulResultReq) (*pb.SaveVul
 			vul.ResponseTruncated = *pbVul.ResponseTruncated
 		}
 
+		// 漏洞名称和标签
+		if pbVul.VulName != nil {
+			vul.VulName = *pbVul.VulName
+		}
+		if len(pbVul.Tags) > 0 {
+			vul.Tags = pbVul.Tags
+		}
+
 		// 使用Upsert避免重复
 		// Note: The Upsert method in VulModel already handles scan_count and timestamps
 		// which provides basic history tracking through first_seen_time and last_seen_time

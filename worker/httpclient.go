@@ -137,6 +137,8 @@ type VulDocument struct {
 	Extra             string   `json:"extra"`
 	Result            string   `json:"result"`
 	TaskId            string   `json:"taskId"`
+	VulName           *string  `json:"vulName,omitempty"`
+	Tags              []string `json:"tags,omitempty"`
 	CvssScore         *float64 `json:"cvssScore,omitempty"`
 	CveId             *string  `json:"cveId,omitempty"`
 	CweId             *string  `json:"cweId,omitempty"`

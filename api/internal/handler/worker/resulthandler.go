@@ -87,6 +87,8 @@ type WorkerVulDocument struct {
 	Extra             string   `json:"extra"`
 	Result            string   `json:"result"`
 	TaskId            string   `json:"taskId"`
+	VulName           *string  `json:"vulName,omitempty"`
+	Tags              []string `json:"tags,omitempty"`
 	CvssScore         *float64 `json:"cvssScore,omitempty"`
 	CveId             *string  `json:"cveId,omitempty"`
 	CweId             *string  `json:"cweId,omitempty"`
@@ -268,6 +270,12 @@ func WorkerVulResultHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			}
 			if vul.ResponseTruncated != nil {
 				pbVul.ResponseTruncated = vul.ResponseTruncated
+			}
+			if vul.VulName != nil {
+				pbVul.VulName = vul.VulName
+			}
+			if len(vul.Tags) > 0 {
+				pbVul.Tags = vul.Tags
 			}
 
 			pbVuls = append(pbVuls, pbVul)

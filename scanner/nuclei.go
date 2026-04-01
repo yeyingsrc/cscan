@@ -696,6 +696,8 @@ func (s *NucleiScanner) convertResult(event *output.ResultEvent) *Vulnerability 
 		Source:    "nuclei",
 		Severity:  event.Info.SeverityHolder.Severity.String(),
 		Result:    resultDesc,
+		VulName:   event.Info.Name,
+		Tags:      event.Info.Tags.ToSlice(),
 	}
 
 	// 关联模板知识库信息 (Requirement 1.4)

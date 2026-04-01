@@ -42,6 +42,7 @@ func (l *VulListLogic) VulList(req *types.VulListReq, workspaceId string) (resp 
 			{"host": bson.M{"$regex": q, "$options": "i"}},
 			{"url": bson.M{"$regex": q, "$options": "i"}},
 			{"pocfile": bson.M{"$regex": q, "$options": "i"}},
+			{"vul_name": bson.M{"$regex": q, "$options": "i"}},
 		}
 	}
 	if req.Authority != "" {
@@ -129,6 +130,8 @@ func (l *VulListLogic) VulList(req *types.VulListReq, workspaceId string) (resp 
 			Source:     v.Source,
 			Severity:   v.Severity,
 			Result:     v.Result,
+			VulName:    v.VulName,
+			Tags:       v.Tags,
 			CreateTime: v.CreateTime.Local().Format("2006-01-02 15:04:05"),
 			ScanCount:  v.ScanCount,
 		}
@@ -333,6 +336,8 @@ func (l *VulDetailLogic) VulDetail(req *types.VulDetailReq, workspaceId string) 
 		Source:     vul.Source,
 		Severity:   vul.Severity,
 		Result:     vul.Result,
+		VulName:    vul.VulName,
+		Tags:       vul.Tags,
 		CreateTime: vul.CreateTime.Local().Format("2006-01-02 15:04:05"),
 		// 知识库信息
 		CvssScore:   vul.CvssScore,

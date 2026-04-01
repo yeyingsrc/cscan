@@ -112,15 +112,17 @@ type IPInfo struct {
 
 // Vulnerability 漏洞
 type Vulnerability struct {
-	Authority string `json:"authority"`
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	Url       string `json:"url"`
-	PocFile   string `json:"pocFile"`
-	Source    string `json:"source"`
-	Severity  string `json:"severity"`
-	Extra     string `json:"extra"`
-	Result    string `json:"result"`
+	Authority string   `json:"authority"`
+	Host      string   `json:"host"`
+	Port      int      `json:"port"`
+	Url       string   `json:"url"`
+	PocFile   string   `json:"pocFile"`
+	Source    string   `json:"source"`
+	Severity  string   `json:"severity"`
+	Extra     string   `json:"extra"`
+	Result    string   `json:"result"`
+	VulName   string   `json:"vulName,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
 
 	// 漏洞知识库关联字段
 	CvssScore   float64  `json:"cvssScore,omitempty"`

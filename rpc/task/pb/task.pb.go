@@ -946,6 +946,9 @@ type VulDocument struct {
 	Request           *string  `protobuf:"bytes,19,opt,name=request,proto3,oneof" json:"request,omitempty"`
 	Response          *string  `protobuf:"bytes,20,opt,name=response,proto3,oneof" json:"response,omitempty"`
 	ResponseTruncated *bool    `protobuf:"varint,21,opt,name=responseTruncated,proto3,oneof" json:"responseTruncated,omitempty"`
+	// 漏洞名称和标签
+	VulName       *string  `protobuf:"bytes,22,opt,name=vulName,proto3,oneof" json:"vulName,omitempty"`
+	Tags          []string `protobuf:"bytes,23,rep,name=tags,proto3" json:"tags,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1125,6 +1128,20 @@ func (x *VulDocument) GetResponseTruncated() bool {
 		return *x.ResponseTruncated
 	}
 	return false
+}
+
+func (x *VulDocument) GetVulName() string {
+	if x != nil && x.VulName != nil {
+		return *x.VulName
+	}
+	return ""
+}
+
+func (x *VulDocument) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
 }
 
 type SaveVulResultReq struct {

@@ -22,6 +22,8 @@ type Vul struct {
 	Extra      string             `bson:"extra" json:"extra"`
 	Result     string             `bson:"result" json:"result"`
 	TaskId     string             `bson:"task_id" json:"taskId"`
+	VulName    string             `bson:"vul_name,omitempty" json:"vulName,omitempty"`
+	Tags       []string           `bson:"tags,omitempty" json:"tags,omitempty"`
 	CreateTime time.Time          `bson:"create_time" json:"createTime"`
 	UpdateTime time.Time          `bson:"update_time" json:"updateTime"`
 
@@ -204,6 +206,9 @@ func (m *VulModel) Upsert(ctx context.Context, doc *Vul) error {
 			"request":            doc.Request,
 			"response":           doc.Response,
 			"response_truncated": doc.ResponseTruncated,
+			// 新增字段 - 漏洞名称和标签
+			"vul_name": doc.VulName,
+			"tags":     doc.Tags,
 			// 新增字段 - 时间追踪
 			"last_seen_time": now,
 		},

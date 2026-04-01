@@ -469,6 +469,7 @@ type AssetInventoryItem struct {
 	Technologies    []string `json:"technologies"`    // 技术栈
 	Labels          []string `json:"labels"`          // 自定义标签
 	Status          string   `json:"status"`          // HTTP状态码
+	Domain          string   `json:"domain,omitempty"` // 域名
 	LastUpdated     string   `json:"lastUpdated"`     // 最后更新时间（相对时间）
 	FirstSeen       string   `json:"firstSeen"`       // 首次发现时间（完整时间）
 	LastUpdatedFull string   `json:"lastUpdatedFull"` // 最后更新时间（完整时间）
@@ -716,14 +717,16 @@ type GetTaskLogsResp struct {
 
 // ==================== 漏洞管理 ====================
 type Vul struct {
-	Id         string `json:"id"`
-	Authority  string `json:"authority"`
-	Url        string `json:"url"`
-	PocFile    string `json:"pocFile"`
-	Source     string `json:"source"`
-	Severity   string `json:"severity"`
-	Result     string `json:"result"`
-	CreateTime string `json:"createTime"`
+	Id         string   `json:"id"`
+	Authority  string   `json:"authority"`
+	Url        string   `json:"url"`
+	PocFile    string   `json:"pocFile"`
+	Source     string   `json:"source"`
+	Severity   string   `json:"severity"`
+	Result     string   `json:"result"`
+	VulName    string   `json:"vulName,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	CreateTime string   `json:"createTime"`
 	// 新增字段 - 时间追踪
 	FirstSeenTime string `json:"firstSeenTime,omitempty"`
 	LastSeenTime  string `json:"lastSeenTime,omitempty"`
@@ -742,16 +745,18 @@ type VulEvidence struct {
 
 // VulDetail 漏洞详情（包含知识库信息和证据链）
 type VulDetail struct {
-	Id         string `json:"id"`
-	Authority  string `json:"authority"`
-	Host       string `json:"host"`
-	Port       int    `json:"port"`
-	Url        string `json:"url"`
-	PocFile    string `json:"pocFile"`
-	Source     string `json:"source"`
-	Severity   string `json:"severity"`
-	Result     string `json:"result"`
-	CreateTime string `json:"createTime"`
+	Id         string   `json:"id"`
+	Authority  string   `json:"authority"`
+	Host       string   `json:"host"`
+	Port       int      `json:"port"`
+	Url        string   `json:"url"`
+	PocFile    string   `json:"pocFile"`
+	Source     string   `json:"source"`
+	Severity   string   `json:"severity"`
+	Result     string   `json:"result"`
+	VulName    string   `json:"vulName,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	CreateTime string   `json:"createTime"`
 	// 知识库信息
 	CvssScore   float64  `json:"cvssScore,omitempty"`
 	CveId       string   `json:"cveId,omitempty"`

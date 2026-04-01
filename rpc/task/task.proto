@@ -166,6 +166,9 @@ message VulDocument {
   optional string request = 19;
   optional string response = 20;
   optional bool responseTruncated = 21;
+  // 漏洞名称和标签
+  optional string vulName = 22;
+  repeated string tags = 23;
 }
 
 message SaveVulResultReq {

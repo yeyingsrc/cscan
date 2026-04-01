@@ -56,6 +56,14 @@ func ToVulDocument(vul *scanner.Vulnerability, taskId string) VulDocument {
 		TaskId:    taskId,
 	}
 
+	if vul.VulName != "" {
+		name := vul.VulName
+		doc.VulName = &name
+	}
+	if len(vul.Tags) > 0 {
+		doc.Tags = vul.Tags
+	}
+
 	if vul.CvssScore > 0 {
 		score := vul.CvssScore
 		doc.CvssScore = &score
