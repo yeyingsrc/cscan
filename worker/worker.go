@@ -1896,6 +1896,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 				// 检查是否有模板ID列表（任务创建时已筛选好的模板）
 				if len(config.PocScan.NucleiTemplateIds) > 0 || len(config.PocScan.CustomPocIds) > 0 {
 					// 通过RPC根据ID获取模板内容（包括默认模板和自定义POC)
+					w.taskLog(task.TaskId, LevelInfo, "POC template request: nucleiTemplateIds=%d, customPocIds=%d", len(config.PocScan.NucleiTemplateIds), len(config.PocScan.CustomPocIds))
 					templates = w.getTemplatesByIds(ctx, config.PocScan.NucleiTemplateIds, config.PocScan.CustomPocIds)
 					w.taskLog(task.TaskId, LevelInfo, "Loaded %d POC templates", len(templates))
 				} else if config.PocScan.CustomPocOnly {
@@ -1927,6 +1928,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 						if config.PocScan.Severity != "" {
 							severities = strings.Split(config.PocScan.Severity, ",")
 						}
+						w.taskLog(task.TaskId, LevelInfo, "POC template auto selection: tags=%v", autoTags)
 						templates = w.getTemplatesByTags(ctx, autoTags, severities)
 						w.taskLog(task.TaskId, LevelInfo, "Loaded %d POC templates", len(templates))
 					} else {
@@ -2747,7 +2749,7 @@ func (w *Worker) getTemplatesByIds(ctx context.Context, nucleiTemplateIds, custo
 		return nil
 	}
 
-	w.logger.Info("GetTemplatesByIds: fetched %d templates", resp.Count)
+	w.logger.Info("GetTemplatesByIds: requested nucleiIds=%d customPocIds=%d, fetched %d templates", len(nucleiTemplateIds), len(customPocIds), resp.Count)
 	return resp.Templates
 }
 

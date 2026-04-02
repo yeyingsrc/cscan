@@ -26,6 +26,9 @@ func NewGetTemplatesByIdsLogic(ctx context.Context, svcCtx *svc.ServiceContext) 
 // 根据ID列表批量获取模板内容
 func (l *GetTemplatesByIdsLogic) GetTemplatesByIds(in *pb.GetTemplatesByIdsReq) (*pb.GetTemplatesByIdsResp, error) {
 	var templates []string
+	var nucleiMatched, nucleiSkipped, customMatched, customSkipped int
+
+	l.Logger.Infof("GetTemplatesByIds request: nucleiIds=%d, customPocIds=%d", len(in.NucleiTemplateIds), len(in.CustomPocIds))
 
 	// 获取Nuclei默认模板
 	if len(in.NucleiTemplateIds) > 0 {
@@ -40,6 +43,9 @@ func (l *GetTemplatesByIdsLogic) GetTemplatesByIds(in *pb.GetTemplatesByIdsReq) 
 		for _, t := range nucleiTemplates {
 			if t.Content != "" && t.Enabled {
 				templates = append(templates, t.Content)
+				nucleiMatched++
+			} else {
+				nucleiSkipped++
 			}
 		}
 	}
@@ -57,9 +63,14 @@ func (l *GetTemplatesByIdsLogic) GetTemplatesByIds(in *pb.GetTemplatesByIdsReq) 
 		for _, p := range customPocs {
 			if p.Content != "" && p.Enabled {
 				templates = append(templates, p.Content)
+				customMatched++
+			} else {
+				customSkipped++
 			}
 		}
 	}
+
+	l.Logger.Infof("GetTemplatesByIds result: nuclei=%d (skipped=%d), custom=%d (skipped=%d), total=%d", nucleiMatched, nucleiSkipped, customMatched, customSkipped, len(templates))
 
 	return &pb.GetTemplatesByIdsResp{
 		Success:   true,

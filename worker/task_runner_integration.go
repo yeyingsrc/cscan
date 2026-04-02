@@ -645,6 +645,7 @@ func (e *PocScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 	var autoTags []string
 
 	if len(config.NucleiTemplateIds) > 0 || len(config.CustomPocIds) > 0 {
+		w.taskLog(task.TaskId, LevelInfo, "POC template request: nucleiTemplateIds=%d, customPocIds=%d", len(config.NucleiTemplateIds), len(config.CustomPocIds))
 		templates = w.getTemplatesByIds(ctx.Ctx, config.NucleiTemplateIds, config.CustomPocIds)
 		w.taskLog(task.TaskId, LevelInfo, "Loaded %d POC templates", len(templates))
 	} else if config.CustomPocOnly {
@@ -674,6 +675,7 @@ func (e *PocScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 			if config.Severity != "" {
 				severities = strings.Split(config.Severity, ",")
 			}
+			w.taskLog(task.TaskId, LevelInfo, "POC template auto selection: tags=%v", autoTags)
 			templates = w.getTemplatesByTags(ctx.Ctx, autoTags, severities)
 			w.taskLog(task.TaskId, LevelInfo, "Loaded %d POC templates", len(templates))
 		} else {
@@ -747,7 +749,7 @@ func (e *PocScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 
 	// 设置默认值
 	if nucleiOpts.RateLimit == 0 {
-		nucleiOpts.RateLimit = 150
+		nucleiOpts.RateLimit = 800
 	}
 	if nucleiOpts.Concurrency == 0 {
 		nucleiOpts.Concurrency = 25
