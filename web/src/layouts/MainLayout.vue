@@ -514,7 +514,7 @@ function handleCommand(command) {
   transition: background 0.3s;
   flex: 1;
   max-width: 1500px;
-  width: 1500px;
+  width: 100%;
   margin: 0 auto;
 
   /* 隐藏滚动条 */
