@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net"
 	"os/exec"
 	"strings"
 	"sync"
@@ -193,6 +194,37 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 		targets = append(targets, config.Targets...)
 	}
 
+	// 优化对nmap的目标支持：去除带有端口的目标（如47.97.246.253:5601）和不必要的schema/路径
+	var cleanTargets []string
+	seenTarget := make(map[string]bool)
+	for _, t := range targets {
+		// 移除 schema
+		if strings.HasPrefix(t, "http://") {
+			t = t[7:]
+		} else if strings.HasPrefix(t, "https://") {
+			t = t[8:]
+		}
+
+		// 移除路径
+		if idx := strings.Index(t, "/"); idx != -1 {
+			t = t[:idx]
+		}
+
+		// 去除端口
+		if host, _, err := net.SplitHostPort(t); err == nil {
+			t = host
+		} else if strings.Contains(t, ":") && !strings.Contains(t, "]") {
+			// 简单的IPv4带端口处理
+			t = strings.Split(t, ":")[0]
+		}
+
+		if t != "" && !seenTarget[t] {
+			seenTarget[t] = true
+			cleanTargets = append(cleanTargets, t)
+		}
+	}
+	targets = cleanTargets
+
 	// 执行nmap扫描
 	assets := s.runNmapWithLogger(ctx, targets, opts, config.OnProgress, logInfo, logWarn, logError)
 
@@ -282,9 +314,9 @@ func (s *NmapScanner) scanSinglePortWithLogger(ctx context.Context, targets []st
 
 	// 构建nmap命令
 	args := []string{
-		"-Pn",                          // 跳过主机发现
-		"-p", fmt.Sprintf("%d", port),  // 单个端口
-		"-oX", "-",                     // XML输出到stdout
+		"-Pn",                         // 跳过主机发现
+		"-p", fmt.Sprintf("%d", port), // 单个端口
+		"-oX", "-", // XML输出到stdout
 	}
 
 	// 添加额外参数
