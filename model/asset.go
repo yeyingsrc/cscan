@@ -488,6 +488,12 @@ func (m *AssetModel) Clear(ctx context.Context) (int64, error) {
 
 func (m *AssetModel) Aggregate(ctx context.Context, field string, limit int) ([]StatResult, error) {
 	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.D{
+			{Key: field, Value: bson.D{
+				{Key: "$exists", Value: true},
+				{Key: "$ne", Value: ""},
+			}},
+		}}},
 		{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$" + field},
 			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
@@ -953,4 +959,79 @@ func (m *AssetModel) BulkUpsert(ctx context.Context, assets []*Asset) (*mongo.Bu
 
 	opts := options.BulkWrite().SetOrdered(false)
 	return m.coll.BulkWrite(ctx, models, opts)
+}
+
+// PortListAggregateResult 端口列表聚合结果
+type PortListAggregateResult struct {
+	Port       int       `bson:"_id"`
+	AssetCount int       `bson:"assetCount"`
+	Hosts      []string  `bson:"hosts"`
+	Services   []string  `bson:"services"`
+	UpdateTime time.Time `bson:"updateTime"`
+}
+
+// AggregatePortList 聚合端口列表，支持分页和总数统计
+func (m *AssetModel) AggregatePortList(ctx context.Context, filter bson.M, skip, limit int) ([]PortListAggregateResult, int64, error) {
+	// 确保端口大于0
+	matchObj := bson.M{}
+	for k, v := range filter {
+		matchObj[k] = v
+	}
+	// 如果过滤条件中没有对port做特殊处理，强制port>0
+	if _, ok := matchObj["port"]; !ok {
+		matchObj["port"] = bson.M{"$gt": 0}
+	}
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: matchObj}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$port"},
+			{Key: "assetCount", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "hosts", Value: bson.D{{Key: "$addToSet", Value: "$host"}}},
+			{Key: "services", Value: bson.D{{Key: "$addToSet", Value: "$service"}}},
+			{Key: "updateTime", Value: bson.D{{Key: "$max", Value: "$update_time"}}},
+		}}},
+	}
+
+	// 使用 facet 进行总量统计和分页
+	facet := bson.D{
+		{Key: "metadata", Value: bson.A{
+			bson.D{{Key: "$count", Value: "total"}},
+		}},
+		{Key: "data", Value: bson.A{
+			bson.D{{Key: "$sort", Value: bson.D{{Key: "_id", Value: 1}}}},
+			bson.D{{Key: "$skip", Value: skip}},
+			bson.D{{Key: "$limit", Value: limit}},
+		}},
+	}
+
+	pipeline = append(pipeline, bson.D{{Key: "$facet", Value: facet}})
+
+	cursor, err := m.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var result []struct {
+		Metadata []struct {
+			Total int64 `bson:"total"`
+		} `bson:"metadata"`
+		Data []PortListAggregateResult `bson:"data"`
+	}
+
+	if err := cursor.All(ctx, &result); err != nil {
+		return nil, 0, err
+	}
+
+	if len(result) == 0 {
+		return []PortListAggregateResult{}, 0, nil
+	}
+
+	total := int64(0)
+	if len(result[0].Metadata) > 0 {
+		total = result[0].Metadata[0].Total
+	}
+
+	return result[0].Data, total, nil
 }
