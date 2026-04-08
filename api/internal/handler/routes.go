@@ -143,6 +143,7 @@ func RegisterHandlers(server *rest.Server, svcCtx *svc.ServiceContext) {
 
 		// 资产管理
 		{Method: http.MethodPost, Path: "/api/v1/asset/list", Handler: asset.AssetListHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/port/list", Handler: asset.PortListHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/asset/stat", Handler: asset.AssetStatHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/asset/groups", Handler: asset.AssetGroupsHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/asset/groups/delete", Handler: asset.DeleteAssetGroupHandler(svcCtx)},
@@ -158,6 +159,18 @@ func RegisterHandlers(server *rest.Server, svcCtx *svc.ServiceContext) {
 		{Method: http.MethodPost, Path: "/api/v1/asset/clear", Handler: asset.AssetClearHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/asset/history", Handler: asset.AssetHistoryHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/asset/import", Handler: asset.AssetImportHandler(svcCtx)},
+
+		// 应用管理
+		{Method: http.MethodPost, Path: "/api/v1/asset/app/list", Handler: asset.AppListHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/app/stat", Handler: asset.AppStatHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/app/batchDelete", Handler: asset.AppBatchDeleteHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/app/clear", Handler: asset.AppClearHandler(svcCtx)},
+
+		// Icon管理
+		{Method: http.MethodPost, Path: "/api/v1/asset/icon/list", Handler: asset.IconListHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/icon/stat", Handler: asset.IconStatHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/icon/batchDelete", Handler: asset.IconBatchDeleteHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/asset/icon/clear", Handler: asset.IconClearHandler(svcCtx)},
 
 		// 扫描结果集成 API
 		{Method: http.MethodPost, Path: "/api/v1/assets/withScans", Handler: asset.AssetsWithScansHandler(svcCtx)},
