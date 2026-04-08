@@ -145,9 +145,15 @@ func (e *DomainScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 		}
 	}
 
+	// Subfinder 完成后立即保存，避免后续超时导致结果丢失
+	if len(subfinderAssets) > 0 {
+		w.taskLog(task.TaskId, LevelInfo, "Saving %d subfinder subdomains to database", len(subfinderAssets))
+		w.saveAssetResult(ctx.Ctx, task.WorkspaceId, task.MainTaskId, ctx.OrgId, subfinderAssets)
+	}
+
 	// 检查控制信号
 	if ctrl := w.checkTaskControl(ctx.Ctx, task.TaskId); ctrl == "STOP" {
-		return &PhaseResult{Stopped: true}, nil
+		return &PhaseResult{Stopped: true, Assets: subfinderAssets}, nil
 	} else if ctrl == "PAUSE" {
 		return &PhaseResult{Paused: true, Assets: subfinderAssets}, nil
 	}
@@ -157,13 +163,28 @@ func (e *DomainScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 		bruteforceAssets = e.executeBruteforce(ctx, config, domainTaskLogger)
 	}
 
-	// 合并结果
+	// 合并结果（去重）
 	allAssets := e.mergeAssets(subfinderAssets, bruteforceAssets)
 
-	// 保存结果
-	if len(allAssets) > 0 {
-		w.taskLog(task.TaskId, LevelInfo, "Saving %d subdomains to database", len(allAssets))
-		w.saveAssetResult(ctx.Ctx, task.WorkspaceId, task.MainTaskId, ctx.OrgId, allAssets)
+	// 只保存暴力破解新发现的增量资产（subfinder 的已保存过）
+	if len(bruteforceAssets) > 0 {
+		// 找出暴力破解独有的资产
+		subfinderHosts := make(map[string]bool)
+		for _, asset := range subfinderAssets {
+			if asset.Host != "" {
+				subfinderHosts[asset.Host] = true
+			}
+		}
+		var newBruteAssets []*scanner.Asset
+		for _, asset := range bruteforceAssets {
+			if asset.Host != "" && !subfinderHosts[asset.Host] {
+				newBruteAssets = append(newBruteAssets, asset)
+			}
+		}
+		if len(newBruteAssets) > 0 {
+			w.taskLog(task.TaskId, LevelInfo, "Saving %d bruteforce subdomains to database", len(newBruteAssets))
+			w.saveAssetResult(ctx.Ctx, task.WorkspaceId, task.MainTaskId, ctx.OrgId, newBruteAssets)
+		}
 	}
 
 	return &PhaseResult{Assets: allAssets}, nil
@@ -349,14 +370,27 @@ func (e *PortScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 
 	// 2. 处理不带端口的目标（执行端口扫描）
 	if len(parseResult.WithoutPort) > 0 {
-		// 创建带超时的上下文
-		portScanTimeout := 600
-		if config.Timeout > 0 {
-			portScanTimeout = config.Timeout * 100
-			if portScanTimeout < 600 {
-				portScanTimeout = 600
-			}
+		// 使用 Worker 并发数覆盖 Naabu Workers
+		if config.Workers <= 0 || config.Workers > w.config.Concurrency {
+			config.Workers = w.config.Concurrency
 		}
+
+		// 按单目标超时计算总超时：单目标超时 × 目标数 / 并发数
+		singleTimeout := config.Timeout
+		if singleTimeout <= 0 {
+			singleTimeout = 5
+		}
+		targetCount := len(parseResult.WithoutPort)
+		concurrency := config.Workers
+		if concurrency <= 0 {
+			concurrency = 1
+		}
+		portScanTimeout := singleTimeout * targetCount / concurrency
+		if portScanTimeout < 60 {
+			portScanTimeout = 60
+		}
+		w.taskLog(task.TaskId, LevelInfo, "Port scan: timeout=%ds (single=%ds, targets=%d, concurrency=%d)",
+			portScanTimeout, singleTimeout, targetCount, concurrency)
 		portCtx, portCancel := context.WithTimeout(ctx.Ctx, time.Duration(portScanTimeout)*time.Second)
 		defer portCancel()
 
@@ -508,11 +542,17 @@ func (e *FingerprintExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 		w.loadCustomFingerprints(ctx.Ctx, s.(*scanner.FingerprintScanner), config.ActiveScan)
 	}
 
-	// 创建带超时的上下文
-	fingerprintTimeout := config.Timeout
-	if fingerprintTimeout <= 0 {
-		fingerprintTimeout = 300
+	// 按单目标超时计算总超时：单目标超时 × 目标数 / 并发数
+	fpConcurrency := config.Concurrency
+	if fpConcurrency <= 0 {
+		fpConcurrency = 1
 	}
+	fingerprintTimeout := targetTimeout * len(assets) / fpConcurrency
+	if fingerprintTimeout < 60 {
+		fingerprintTimeout = 60
+	}
+	w.taskLog(task.TaskId, LevelInfo, "Fingerprint: total timeout=%ds (single=%ds, assets=%d, concurrency=%d)",
+		fingerprintTimeout, targetTimeout, len(assets), fpConcurrency)
 	fpCtx, fpCancel := context.WithTimeout(ctx.Ctx, time.Duration(fingerprintTimeout)*time.Second)
 	defer fpCancel()
 
@@ -694,11 +734,22 @@ func (e *PocScanExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 	// 创建漏洞缓冲区
 	vulBuffer := NewVulnerabilityBuffer(1)
 
-	// 计算总超时
-	pocTimeout := pocTargetTimeout * len(assets)
-	if pocTimeout < 600 {
-		pocTimeout = 600
+	// 使用 Worker 并发数
+	if config.Concurrency <= 0 || config.Concurrency > w.config.Concurrency {
+		config.Concurrency = w.config.Concurrency
 	}
+
+	// 按单目标超时计算总超时：单目标超时 × 目标数 / 并发数
+	pocConcurrency := config.Concurrency
+	if pocConcurrency <= 0 {
+		pocConcurrency = 1
+	}
+	pocTimeout := pocTargetTimeout * len(assets) / pocConcurrency
+	if pocTimeout < 60 {
+		pocTimeout = 60
+	}
+	w.taskLog(task.TaskId, LevelInfo, "POC scan: total timeout=%ds (single=%ds, assets=%d, concurrency=%d)",
+		pocTimeout, pocTargetTimeout, len(assets), pocConcurrency)
 	pocCtx, pocCancel := context.WithTimeout(ctx.Ctx, time.Duration(pocTimeout)*time.Second)
 	defer pocCancel()
 
@@ -829,6 +880,13 @@ func (e *PortIdentifyExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 	} else if ctrl == "PAUSE" {
 		return &PhaseResult{Paused: true}, nil
 	}
+
+	// 使用 Worker 并发数
+	if config.Concurrency <= 0 {
+		config.Concurrency = w.config.Concurrency
+	}
+	w.taskLog(task.TaskId, LevelInfo, "Port identify: %d assets, concurrency=%d",
+		len(ctx.Assets), config.Concurrency)
 
 	// 调用 Worker 的 executePortIdentify 方法
 	identifiedAssets := w.executePortIdentify(ctx.Ctx, task, ctx.Assets, config)
