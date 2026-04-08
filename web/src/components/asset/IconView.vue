@@ -32,7 +32,7 @@
       </template>
 
       <template #toolbar-right>
-        <el-button type="danger" plain @click="handleClear">{{ $t('asset.clearData') || '清空数据' }}</el-button>
+        <el-button type="danger" plain @click="handleClear($emit)">{{ $t('asset.clearData') || '清空数据' }}</el-button>
       </template>
 
       <template #iconImage="{ row }">
@@ -95,31 +95,36 @@
 
       <template #operation="{ row }">
         <el-button type="primary" link size="small" @click="viewAssets(row)">{{ t('asset.iconView.viewAssets') }}</el-button>
-        <el-button type="danger" link size="small" @click="handleDelete(row)">{{ $t('common.delete') || '删除' }}</el-button>
+        <el-button type="danger" link size="small" @click="handleDelete(row, $emit)">{{ $t('common.delete') || '删除' }}</el-button>
       </template>
     </ProTable>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
-import request from '@/api/request'
 import ProTable from '@/components/common/ProTable.vue'
 import { formatScreenshotUrl } from '@/utils/screenshot'
+import { useAssetView } from '@/composables/useAssetView'
 
-const { t } = useI18n()
 const emit = defineEmits(['data-changed'])
-const proTableRef = ref(null)
 
-const selectedRows = computed(() => proTableRef.value?.selectedRows || [])
-
-const statLabels = computed(() => ({
-  total: t('asset.iconView.total'),
-  newCount: t('asset.iconView.newCount')
-}))
+const {
+  t, proTableRef, selectedRows, statLabels,
+  handleDelete, handleClear, handleExport
+} = useAssetView({
+  apiPrefix: '/asset/icon',
+  viewType: 'iconHash',
+  localePrefix: 'icon',
+  exportHeaders: ['IconHash', 'IconHashFile', 'Assets', 'CreateTime'],
+  exportRowFormatter: row => [
+    row.iconHash || '',
+    row.iconHashFile || '',
+    (row.assets || []).join(';'),
+    row.createTime || ''
+  ]
+})
 
 const iconColumns = computed(() => [
   { label: t('asset.iconView.columns.iconImage'), prop: 'iconData', slot: 'iconImage', width: 90 },
@@ -135,111 +140,8 @@ const searchItems = computed(() => [
   { label: t('asset.iconView.filters.iconHash'), prop: 'icon_hash', type: 'input' }
 ])
 
-async function handleDelete(row) {
-  try {
-    await ElMessageBox.confirm(t('asset.iconView.confirmDelete'), t('common.tip'), { type: 'warning' })
-    const res = await request.post('/asset/icon/delete', { id: row.id })
-    if (res.code === 0) {
-      ElMessage.success(t('common.deleteSuccess'))
-      proTableRef.value?.loadData()
-      emit('data-changed')
-    }
-  } catch (e) {
-    // cancelled
-  }
-}
-
-async function handleClear() {
-  try {
-    await ElMessageBox.confirm(t('asset.iconView.confirmClear'), t('common.warning'), { type: 'error' })
-    const res = await request.post('/asset/icon/clear')
-    if (res.code === 0) {
-      ElMessage.success(t('asset.clearSuccess'))
-      proTableRef.value?.loadData()
-      emit('data-changed')
-    }
-  } catch (e) {
-    // cancelled
-  }
-}
-
 function viewAssets(row) {
   window.location.href = `/asset-management?tab=inventory&subTab=port&iconHash=${encodeURIComponent(row.iconHash)}`
-}
-
-async function handleExport(command) {
-  let data = []
-
-  if (command === 'selected') {
-    if (selectedRows.value.length === 0) {
-      ElMessage.warning(t('common.pleaseSelect'))
-      return
-    }
-    data = selectedRows.value
-  } else {
-    ElMessage.info(t('asset.gettingAllData'))
-    try {
-      const res = await request.post('/asset/icon/list', { ...proTableRef.value?.searchForm, page: 1, pageSize: 10000 })
-      if (res.code === 0) {
-        data = res.list || []
-      } else {
-        ElMessage.error(t('asset.getDataFailed'))
-        return
-      }
-    } catch (e) {
-      ElMessage.error(t('asset.getDataFailed'))
-      return
-    }
-  }
-
-  if (data.length === 0) {
-    ElMessage.warning(t('asset.noDataToExport'))
-    return
-  }
-
-  if (command === 'csv') {
-    const headers = ['IconHash', 'IconHashFile', 'Assets', 'CreateTime']
-    const csvRows = [headers.join(',')]
-    for (const row of data) {
-      csvRows.push([
-        escapeCsvField(row.iconHash || ''),
-        escapeCsvField(row.iconHashFile || ''),
-        escapeCsvField((row.assets || []).join(';')),
-        escapeCsvField(row.createTime || '')
-      ].join(','))
-    }
-    downloadBlob(`icons_${new Date().toISOString().slice(0, 10)}.csv`, new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' }))
-    ElMessage.success(t('asset.exportSuccess', { count: data.length }))
-    return
-  }
-
-  const lines = data.map(row => row.iconHash).filter(Boolean)
-  if (lines.length === 0) {
-    ElMessage.warning(t('asset.noDataToExport'))
-    return
-  }
-  downloadBlob(command === 'selected' ? 'icons_selected.txt' : 'icons_all.txt', new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }))
-  ElMessage.success(t('asset.exportSuccess', { count: lines.length }))
-}
-
-function downloadBlob(filename, blob) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
-
-function escapeCsvField(field) {
-  if (field == null) return ''
-  const str = String(field)
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return '"' + str.replace(/"/g, '""') + '"'
-  }
-  return str
 }
 
 function getIconDataUrl(iconData) {
