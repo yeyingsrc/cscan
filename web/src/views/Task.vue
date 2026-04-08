@@ -55,7 +55,7 @@
             <el-table-column type="selection" width="50" />
             <el-table-column prop="name" :label="$t('task.taskName')" min-width="150" />
             <el-table-column prop="target" :label="$t('task.scanTarget')" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="status" :label="$t('task.status')" width="100">
+            <el-table-column prop="status" :label="$t('task.status')" width="150">
               <template #default="{ row }">
                 <el-tag :type="getStatusType(row.status, row)">{{ getStatusText(row) }}</el-tag>
               </template>
