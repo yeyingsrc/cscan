@@ -188,11 +188,10 @@
               @mouseenter="showPreview(asset, $event)"
               @mouseleave="hidePreview"
             >
-              <img 
+              <img
                 :src="formatScreenshotUrl(asset.screenshot)"
                 :alt="asset.title"
                 class="screenshot-img"
-                loading="lazy"
                 @error="handleScreenshotError"
               />
             </div>
