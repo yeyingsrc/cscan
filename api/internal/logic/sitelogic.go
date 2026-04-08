@@ -46,14 +46,14 @@ func (l *SiteLogic) SiteList(req *types.SiteListReq, workspaceId string) (*types
 		assetModel := model.NewAssetModel(l.svcCtx.MongoDB, wsId)
 
 		// 构建Web资产查询条件
-		// Web资产判断：is_http=true 或 service包含http 或 有title 或 有screenshot
+		// Web资产判断：确保是有效的站点资产，有实际的Web特征(is_http, title, status, screenshot 等)
+		// 去除了纯端口或推测服务判断，过滤掉无实际HTTP响应的无效资产
 		webFilter := bson.M{
 			"$or": []bson.M{
 				{"is_http": true},
-				{"service": bson.M{"$in": []string{"http", "https", "http-proxy", "https-alt"}}},
 				{"title": bson.M{"$exists": true, "$ne": ""}},
+				{"status": bson.M{"$exists": true, "$nin": []string{"", "0"}}},
 				{"screenshot": bson.M{"$exists": true, "$ne": ""}},
-				{"port": bson.M{"$in": []int{80, 443, 8080, 8443, 8000, 8888, 9000, 3000, 5000}}},
 			},
 		}
 
