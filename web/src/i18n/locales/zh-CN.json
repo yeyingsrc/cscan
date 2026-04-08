@@ -229,6 +229,7 @@
     "ip": "IP地址",
     "site": "站点",
     "fingerprint": "指纹",
+    "icon": "图标",
     "url": "URL",
     "pageTitle": "标题",
     "statusCode": "状态码",
@@ -245,6 +246,8 @@
     "assetGroups": "资产分组",
     "assetInventory": "资产清单",
     "screenshots": "截图清单",
+    "icon": "Icon",
+    "searchApp": "搜索应用名称",
     "searchAssetGroups": "搜索资产分组...",
     "searchInHostNames": "搜索IP/域名/主机名/标题...",
     "searchInScreenshots": "搜索主机名/标题...",
@@ -359,6 +362,52 @@
       "iconHash": "IconHash",
       "server": "服务器",
       "banner": "Banner"
+    },
+    "appView": {
+      "total": "应用总数",
+      "newCount": "今日新增",
+      "viewAssets": "查看资产",
+      "searchPlaceholder": "搜索应用名称",
+      "exportSelected": "导出选中项 ({count})",
+      "exportAll": "导出所有",
+      "exportCsv": "导出 CSV",
+      "confirmDelete": "确定要删除该应用记录吗？",
+      "confirmClear": "确定要清空所有应用数据吗？",
+      "columns": {
+        "app": "应用名称",
+        "assets": "关联资产",
+        "category": "分类",
+        "organization": "所属组织",
+        "createTime": "发现时间",
+        "operation": "操作"
+      },
+      "filters": {
+        "app": "应用名称",
+        "organization": "所属组织",
+        "allOrganizations": "全部组织"
+      }
+    },
+    "iconView": {
+      "total": "总数",
+      "newCount": "新增",
+      "viewAssets": "查看资产",
+      "exportSelected": "导出选中项 ({count})",
+      "exportAll": "导出全部",
+      "exportCsv": "导出 CSV",
+      "confirmDelete": "确定删除该 Icon 吗？",
+      "confirmClear": "确定清空所有 Icon 数据吗？",
+      "filters": {
+        "iconHash": "Icon Hash"
+      },
+      "columns": {
+        "iconImage": "Icon图标",
+        "iconHash": "Icon Hash",
+        "assets": "关联资产",
+        "screenshot": "截图",
+        "createTime": "发现时间",
+        "updateTime": "更新时间",
+        "operation": "操作"
+      }
     },
     "assetGroupsTab": {
       "searchPlaceholder": "搜索资产分组...",
@@ -619,7 +668,7 @@
     "retry": "重新执行",
     "delete": "删除",
     "created": "待启动",
-    "pendingExec": "等待执行",
+    "pendingExec": "待安装扫描节点",
     "executing": "执行中",
     "paused": "已暂停",
     "execFailed": "执行失败",
