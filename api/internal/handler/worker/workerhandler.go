@@ -319,7 +319,7 @@ func WorkerLogsExportHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			req.Format = "json"
 		}
 
-		logs, err := svcCtx.RedisClient.XRevRangeN(r.Context(), "cscan:worker:logs", "+", "-", 10000).Result()
+		logs, err := svcCtx.RedisClient.XRevRange(r.Context(), "cscan:worker:logs", "+", "-").Result()
 		if err != nil {
 			response.Error(w, err)
 			return
