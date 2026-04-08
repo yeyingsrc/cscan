@@ -3,8 +3,8 @@
 
 
     <!-- Global Toolbar (Top) -->
-    <div class="pro-table-top-toolbar">
-      <div class="global-search">
+    <div v-if="showTopToolbar" class="pro-table-top-toolbar">
+      <div v-if="searchPlaceholder || $slots.search" class="global-search">
         <slot name="search">
           <el-autocomplete
             v-if="searchPlaceholder"
@@ -22,9 +22,8 @@
         </slot>
       </div>
 
-      <div class="header-actions">
+      <div v-if="showTopFilterButton" class="header-actions">
         <el-button
-          v-if="searchItems && searchItems.length > 0"
           @click="showFilters = !showFilters"
         >
           <el-icon><Filter /></el-icon>
@@ -32,6 +31,7 @@
         </el-button>
       </div>
     </div>
+
 
     <!-- Filters Panel -->
     <div v-if="showFilters && searchItems && searchItems.length > 0" class="filters-panel">
@@ -117,6 +117,14 @@
           </template>
         </el-dropdown>
 
+        <el-button
+          v-if="showInlineFilterButton"
+          @click="showFilters = !showFilters"
+        >
+          <el-icon><Filter /></el-icon>
+          {{ $t('asset.assetInventoryTab.filters') || '过滤器' }}
+        </el-button>
+
         <slot name="toolbar-left"></slot>
       </div>
       <div class="batch-right">
@@ -177,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted, useSlots } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Filter, Search } from '@element-plus/icons-vue'
@@ -261,6 +269,13 @@ const pagination = reactive({
 // I18n
 const { t } = useI18n()
 const emit = defineEmits(['data-changed'])
+
+const hasFilterButton = props.searchItems && props.searchItems.length > 0
+const hasSearchToolbar = !!props.searchPlaceholder
+const hasCustomSearchSlot = !!useSlots().search
+const showTopFilterButton = hasFilterButton && (hasSearchToolbar || hasCustomSearchSlot)
+const showInlineFilterButton = hasFilterButton && !showTopFilterButton
+const showTopToolbar = hasSearchToolbar || hasCustomSearchSlot || showTopFilterButton
 
 // Placeholder for advanced search form, currently synced with url
 const searchForm = reactive({})
