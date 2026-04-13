@@ -173,7 +173,7 @@
       v-model:current-page="pagination.page"
       v-model:page-size="pagination.pageSize"
       :total="pagination.total"
-      :page-sizes="[12, 24, 48, 96]"
+      :page-sizes="[20, 40, 60, 100]"
       layout="total, sizes, prev, pager, next"
       class="pagination"
       @size-change="loadData"
@@ -464,8 +464,8 @@ defineExpose({ refresh: loadData })
 
 .screenshots-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
   margin-bottom: 20px;
 }
 
@@ -475,6 +475,26 @@ defineExpose({ refresh: loadData })
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.3s;
+  min-width: 0;
+}
+
+/* 响应式：小屏幕显示3个 */
+@media (max-width: 1200px) {
+  .screenshots-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .screenshots-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .screenshots-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .screenshot-card:hover {
