@@ -59,6 +59,7 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 
 	// 结果处理锁
 	var mu sync.Mutex
+	var processedTargets sync.Map
 
 	// 配置httpx选项
 	httpxOpts := runner.Options{
@@ -138,6 +139,14 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 					logx.Debugf("httpx result not matched: input=%s, url=%s", result.Input, result.URL)
 				}
 				return
+			}
+
+			// 防止同一个资产被并发的 httpx 回调多次更新，形成Data Race
+			if result.URL != "" {
+				if _, exists := processedTargets.Load(result.URL); exists {
+					return
+				}
+				processedTargets.Store(result.URL, true)
 			}
 
 			// 更新资产信息
@@ -228,11 +237,27 @@ func (s *FingerprintScanner) RunHttpxLib(ctx context.Context, assets []*Asset, o
 		}
 		return err
 	}
-	defer httpxRunner.Close()
+
+	scanDone := make(chan struct{})
+	go func() {
+		select {
+		case <-scanDone:
+			httpxRunner.Close()
+		case <-ctx.Done():
+			if taskLog != nil {
+				taskLog("ERROR", "httpx scan canceled or timed out, forcing close")
+			} else {
+				logx.Errorf("httpx scan canceled or timed out, forcing close")
+			}
+			httpxRunner.Close()
+		}
+	}()
 
 	// 运行扫描
 	logx.Infof("Running httpx library scan for %d targets", len(targets))
 	httpxRunner.RunEnumeration()
+
+	close(scanDone)
 
 	return nil
 }
