@@ -5,14 +5,13 @@ import (
 	"net/http"
 	"time"
 
+	"cscan/api/internal/logic"
 	"cscan/api/internal/svc"
 	"cscan/pkg/response"
 	"cscan/rpc/task/pb"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpx"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 // ==================== Worker Task Types ====================
@@ -249,40 +248,13 @@ func WorkerTaskRecoveryHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		logx.Infof("[WorkerTaskRecovery] Worker %s requesting task recovery", req.WorkerName)
 
 		ctx := r.Context()
-		var recoveredTasks []RecoveredTaskInfo
 
-		// 清理该 Worker 在 processing 集合中的任务记录
-		processingKey := "cscan:task:processing"
-		taskIds, err := svcCtx.RedisClient.SMembers(ctx, processingKey).Result()
-		if err == nil {
-			for _, taskId := range taskIds {
-				statusKey := "cscan:task:status:" + taskId
-				statusData, err := svcCtx.RedisClient.Get(ctx, statusKey).Result()
-				if err != nil {
-					// 状态不存在，从处理中集合移除
-					svcCtx.RedisClient.SRem(ctx, processingKey, taskId)
-					continue
-				}
+		// 1. 清理该 Worker 在 processing 集合中的任务记录
+		logic.CleanupStaleProcessingTasks(ctx, svcCtx, req.WorkerName)
 
-				var status map[string]interface{}
-				if err := json.Unmarshal([]byte(statusData), &status); err != nil {
-					continue
-				}
-
-				// 如果任务关联到指定 Worker，清理它
-				if worker, ok := status["worker"].(string); ok {
-					if worker == req.WorkerName {
-						svcCtx.RedisClient.SRem(ctx, processingKey, taskId)
-						svcCtx.RedisClient.Del(ctx, statusKey)
-					}
-				}
-			}
-		}
-
-		// 获取所有 workspace 并恢复卡住的任务
-		workspaces, err := svcCtx.WorkspaceModel.FindAll(ctx)
+		// 2. 恢复超时的孤儿任务 (5分钟认为超时)
+		recoveredTasksInfo, err := logic.RecoverOrphanedTasks(ctx, svcCtx, 5*time.Minute)
 		if err != nil {
-			logx.Errorf("[WorkerTaskRecovery] Failed to get workspaces: %v", err)
 			httpx.OkJson(w, &WorkerTaskRecoveryResp{
 				Code:    500,
 				Msg:     "获取工作空间失败",
@@ -291,74 +263,16 @@ func WorkerTaskRecoveryHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			return
 		}
 
-		// 任务超时时间：5 分钟没有更新的任务认为需要恢复
-		cutoffTime := time.Now().Add(-5 * time.Minute)
-
-		for _, ws := range workspaces {
-			taskModel := svcCtx.GetMainTaskModel(ws.Name)
-
-			// 查找状态为 STARTED 且超时的任务
-			filter := bson.M{
-				"status": "STARTED",
-				"update_time": bson.M{
-					"$lt": cutoffTime,
-				},
-			}
-
-			tasks, err := taskModel.Find(ctx, filter, 0, 50)
-			if err != nil {
-				logx.Errorf("[WorkerTaskRecovery] Failed to find tasks for workspace %s: %v", ws.Name, err)
-				continue
-			}
-
-			for _, task := range tasks {
-				// 将任务状态重置为 PENDING
-				update := bson.M{
-					"status":      "PENDING",
-					"update_time": time.Now(),
-				}
-
-				if err := taskModel.UpdateByTaskId(ctx, task.TaskId, update); err != nil {
-					logx.Errorf("[WorkerTaskRecovery] Failed to update task %s: %v", task.TaskId, err)
-					continue
-				}
-
-				// 重新将任务推入队列
-				taskInfo := map[string]interface{}{
-					"taskId":      task.TaskId,
-					"mainTaskId":  task.TaskId,
-					"workspaceId": ws.Name,
-					"taskName":    task.Name,
-					"config":      task.Config,
-					"priority":    5, // 恢复任务使用较高优先级
-					"createTime":  time.Now().Format("2006-01-02 15:04:05"),
-				}
-
-				taskData, _ := json.Marshal(taskInfo)
-				score := float64(time.Now().Unix()) - 5000 // 提高优先级
-
-				publicQueueKey := "cscan:task:queue"
-				if err := svcCtx.RedisClient.ZAdd(ctx, publicQueueKey, redis.Z{
-					Score:  score,
-					Member: taskData,
-				}).Err(); err != nil {
-					logx.Errorf("[WorkerTaskRecovery] Failed to requeue task %s: %v", task.TaskId, err)
-					continue
-				}
-
-				startTimeStr := ""
-				if task.StartTime != nil {
-					startTimeStr = task.StartTime.Format("2006-01-02 15:04:05")
-				}
-
-				recoveredTasks = append(recoveredTasks, RecoveredTaskInfo{
-					TaskId:      task.TaskId,
-					MainTaskId:  task.TaskId,
-					WorkspaceId: ws.Name,
-					Status:      task.Status,
-					StartTime:   startTimeStr,
-				})
-			}
+		// 转换为响应数据结构
+		var recoveredTasks []RecoveredTaskInfo
+		for _, v := range recoveredTasksInfo {
+			recoveredTasks = append(recoveredTasks, RecoveredTaskInfo{
+				TaskId:      v.TaskId,
+				MainTaskId:  v.MainTaskId,
+				WorkspaceId: v.WorkspaceId,
+				Status:      v.Status,
+				StartTime:   v.StartTime,
+			})
 		}
 
 		if len(recoveredTasks) > 0 {
