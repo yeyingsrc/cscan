@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"cscan/model"
+	"cscan/pkg/geolocation"
 	"cscan/pkg/mapping"
 	"cscan/pkg/utils"
 	"cscan/scanner"
@@ -306,6 +308,9 @@ func NewWorker(config WorkerConfig) (*Worker, error) {
 
 	// 注册扫描器
 	w.registerScanners()
+
+	// 初始化 IP 地理位置服务
+	w.initGeolocation()
 
 	// 初始化自适应扫描配置（根据系统硬件自动调整扫描器参数）
 	adaptiveCfg := scanner.GetGlobalAdaptiveConfig()
@@ -4284,6 +4289,59 @@ func parsePortList(portsStr string) []int {
 	}
 
 	return ports
+}
+
+// initGeolocation 初始化 IP 地理位置服务
+func (w *Worker) initGeolocation() {
+	// 添加 panic 恢复机制
+	defer func() {
+		if r := recover(); r != nil {
+			w.logger.Error("Init geolocation panic recovered: %v", r)
+		}
+	}()
+
+	w.logger.Info("InitGeolocation: starting initialization...")
+
+	// 查找 data 目录（支持相对路径和绝对路径）
+	dataDir := "data"
+
+	// 首先检查当前目录下的 data
+	if _, err := os.Stat(dataDir); err == nil {
+		w.logger.Info("InitGeolocation: found data dir at current directory: %s", dataDir)
+	} else {
+		// 尝试可执行文件所在目录
+		execPath, _ := os.Executable()
+		if execPath != "" {
+			projectRoot := filepath.Dir(execPath)
+			dataDir = filepath.Join(projectRoot, "data")
+			w.logger.Info("InitGeolocation: trying exec path: %s", dataDir)
+		}
+	}
+
+	// 检查数据库文件是否存在
+	v4Path := filepath.Join(dataDir, "ip2region_v4.xdb")
+	w.logger.Info("InitGeolocation: checking database at: %s", v4Path)
+
+	if _, err := os.Stat(v4Path); os.IsNotExist(err) {
+		w.logger.Info("InitGeolocation: ip2region database NOT found at %s, geolocation disabled", v4Path)
+		return
+	}
+
+	w.logger.Info("InitGeolocation: database file found, initializing service...")
+
+	// 初始化 geolocation 服务
+	config := geolocation.Config{
+		Enabled:      true,
+		DataDir:      dataDir,
+		AutoDownload: false,
+	}
+
+	if err := geolocation.GetManager().InitWithConfig(config); err != nil {
+		w.logger.Error("InitGeolocation: failed to init geolocation service: %v", err)
+		return
+	}
+
+	w.logger.Info("InitGeolocation: SUCCESS, service initialized with data dir: %s", dataDir)
 }
 
 // loadHttpServiceMappings 从 HTTP 接口加载HTTP服务设置（端口配置+服务映射）
