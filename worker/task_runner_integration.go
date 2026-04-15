@@ -636,12 +636,10 @@ func (e *FingerprintExecutor) Execute(ctx *TaskContext) (*PhaseResult, error) {
 			}
 		}
 
-		// 刷新流式缓冲区剩余资产
+		// 刷新流式缓冲区剩余资产（不再全量保存 ctx.Assets，避免重复）
 		assetBuffer.Flush(ctx.Ctx, func(assets []*scanner.Asset) {
 			w.saveAssetResult(ctx.Ctx, task.WorkspaceId, task.MainTaskId, ctx.OrgId, assets)
 		})
-		// 保存更新结果
-		w.saveAssetResult(ctx.Ctx, task.WorkspaceId, task.MainTaskId, ctx.OrgId, ctx.Assets)
 	}
 
 	return &PhaseResult{}, nil
