@@ -808,7 +808,7 @@
     </el-dialog>
 
     <!-- POC选择对话框 -->
-    <el-dialog v-model="pocSelectDialogVisible" :title="$t('task.selectPoc')" width="1200px" @open="handlePocDialogOpen">
+    <el-dialog v-model="pocSelectDialogVisible" :title="$t('task.selectPoc')" width="1260px" @open="handlePocDialogOpen">
       <div class="poc-select-container">
         <!-- 左侧：POC列表 -->
         <div class="poc-select-left">
@@ -940,7 +940,7 @@
             <!-- 默认模板 -->
             <div v-if="filteredSelectedNucleiTemplates.length > 0" class="selected-group">
               <div class="group-header">
-                <span>{{ $t('task.defaultTemplate') }} ({{ filteredSelectedNucleiTemplates.length }})</span>
+                <span>{{ $t('task.defaultTemplate') }} ({{ filteredSelectedNucleiTemplates.length }}<template v-if="selectedPocSearchKeyword">/{{ selectedNucleiTemplates.length }}</template>)</span>
                 <el-button type="danger" link size="small" @click="clearNucleiSelections">{{ $t('task.clear') }}</el-button>
               </div>
               <div class="selected-items">
@@ -953,7 +953,7 @@
             <!-- 自定义POC -->
             <div v-if="filteredSelectedCustomPocs.length > 0" class="selected-group">
               <div class="group-header">
-                <span>{{ $t('task.customPoc') }} ({{ filteredSelectedCustomPocs.length }})</span>
+                <span>{{ $t('task.customPoc') }} ({{ filteredSelectedCustomPocs.length }}<template v-if="selectedPocSearchKeyword">/{{ selectedCustomPocs.length }}</template>)</span>
                 <el-button type="danger" link size="small" @click="clearCustomPocSelections">{{ $t('task.clear') }}</el-button>
               </div>
               <div class="selected-items">
@@ -1192,6 +1192,9 @@ const selectedCustomPocIds = ref([])
 const selectedNucleiTemplates = ref([])
 const selectedCustomPocs = ref([])
 const selectedPocSearchKeyword = ref('')
+// 防护标志：数据加载或批量选择期间，跳过 selection-change 事件处理
+const isLoadingData = ref(false)
+const isSelectingAll = ref(false)
 const nucleiTemplateFilter = reactive({ keyword: '', severity: '', category: '', tag: '' })
 const customPocFilter = reactive({ name: '', severity: '', tag: '' })
 const nucleiTemplatePagination = reactive({ page: 1, pageSize: 50, total: 0 })
@@ -1697,6 +1700,7 @@ async function handleRecursiveDictDialogOpen() {
 
 async function loadNucleiTemplatesForSelect() {
   nucleiTemplateLoading.value = true
+  isLoadingData.value = true
   try {
     const res = await getNucleiTemplateList({
       page: nucleiTemplatePagination.page, pageSize: nucleiTemplatePagination.pageSize,
@@ -1704,136 +1708,225 @@ async function loadNucleiTemplatesForSelect() {
       category: nucleiTemplateFilter.category, tag: nucleiTemplateFilter.tag
     })
     if (res.code === 0) {
-      nucleiTemplateList.value = res.data.list || []
-      nucleiTemplatePagination.total = res.data.total
-      nextTick(() => {
-        if (nucleiTableRef.value && form.pocscanNucleiTemplateIds) {
-          nucleiTemplateList.value.forEach(row => {
-            if (form.pocscanNucleiTemplateIds.includes(row.id)) {
-              nucleiTableRef.value.toggleRowSelection(row, true)
-            }
-          })
-        }
-      })
+      nucleiTemplateList.value = res.list || []
+      nucleiTemplatePagination.total = res.total || 0
+      await nextTick()
+      restoreNucleiTableSelection()
     }
-  } finally { nucleiTemplateLoading.value = false }
+  } finally {
+    nucleiTemplateLoading.value = false
+    // 延迟重置，避免 toggleRowSelection 触发的 selection-change 覆盖跨页选择
+    setTimeout(() => { isLoadingData.value = false }, 100)
+  }
+}
+
+// 恢复当前页 Nuclei 表格的选中状态（不影响其他页）
+function restoreNucleiTableSelection() {
+  if (!nucleiTableRef.value) return
+  const selectedIds = new Set(selectedNucleiTemplateIds.value)
+  nucleiTemplateList.value.forEach(row => {
+    if (selectedIds.has(row.id)) {
+      nucleiTableRef.value.toggleRowSelection(row, true)
+    }
+  })
 }
 
 async function loadCustomPocsForSelect() {
   customPocLoading.value = true
+  isLoadingData.value = true
   try {
     const res = await getCustomPocList({
       page: customPocPagination.page, pageSize: customPocPagination.pageSize,
       name: customPocFilter.name, severity: customPocFilter.severity, tag: customPocFilter.tag
     })
     if (res.code === 0) {
-      customPocList.value = res.data.list || []
-      customPocPagination.total = res.data.total
-      nextTick(() => {
-        if (customPocTableRef.value && form.pocscanCustomPocIds) {
-          customPocList.value.forEach(row => {
-            if (form.pocscanCustomPocIds.includes(row.id)) {
-              customPocTableRef.value.toggleRowSelection(row, true)
-            }
-          })
-        }
-      })
+      customPocList.value = res.list || []
+      customPocPagination.total = res.total || 0
+      await nextTick()
+      restoreCustomPocTableSelection()
     }
-  } finally { customPocLoading.value = false }
+  } finally {
+    customPocLoading.value = false
+    setTimeout(() => { isLoadingData.value = false }, 100)
+  }
 }
 
-function handlePocDialogOpen() {
-  if (pocSelectTab.value === 'nuclei') {
-    loadNucleiTemplatesForSelect()
-  } else {
-    loadCustomPocsForSelect()
-  }
-  pocSelectDialogVisible.value = true
+// 恢复当前页自定义 POC 表格的选中状态
+function restoreCustomPocTableSelection() {
+  if (!customPocTableRef.value) return
+  const selectedIds = new Set(selectedCustomPocIds.value)
+  customPocList.value.forEach(row => {
+    if (selectedIds.has(row.id)) {
+      customPocTableRef.value.toggleRowSelection(row, true)
+    }
+  })
+}
+
+async function handlePocDialogOpen() {
+  // 并行加载两个 Tab 的首页数据（restore 在各自 load 内完成）
+  await Promise.all([loadNucleiTemplatesForSelect(), loadCustomPocsForSelect()])
 }
 
 function handleDictSelectionChange(val) { selectedDictRows.value = val }
 function handleSubdomainDictSelectionChange(val) { selectedSubdomainDictRows.value = val }
 function handleRecursiveDictSelectionChange(val) { selectedRecursiveDictRows.value = val }
-function handleNucleiSelectionChange(val) { selectedNucleiTemplates.value = val; updateNucleiTemplateIdsFromSelection() }
-function handleCustomPocSelectionChange(val) { selectedCustomPocs.value = val; updateCustomPocIdsFromSelection() }
+
+function handleNucleiSelectionChange(selection) {
+  // 数据加载或"选择全部"期间跳过，避免覆盖跨页选择
+  if (isSelectingAll.value || isLoadingData.value) return
+
+  const currentPageIds = new Set(nucleiTemplateList.value.map(t => t.id))
+  const currentPageSelectedIds = new Set(selection.map(t => t.id))
+  const currentPageSelectedItems = selection.filter(t => currentPageIds.has(t.id))
+
+  // 保留其他页的 ID
+  const newSelectedIds = selectedNucleiTemplateIds.value.filter(id => !currentPageIds.has(id))
+  currentPageSelectedIds.forEach(id => newSelectedIds.push(id))
+  selectedNucleiTemplateIds.value = newSelectedIds
+
+  // 保留其他页的对象
+  const otherPageItems = selectedNucleiTemplates.value.filter(t => !currentPageIds.has(t.id))
+  selectedNucleiTemplates.value = [...otherPageItems, ...currentPageSelectedItems]
+}
+
+function handleCustomPocSelectionChange(selection) {
+  if (isSelectingAll.value || isLoadingData.value) return
+
+  const currentPageIds = new Set(customPocList.value.map(p => p.id))
+  const currentPageSelectedIds = new Set(selection.map(p => p.id))
+  const currentPageSelectedItems = selection.filter(p => currentPageIds.has(p.id))
+
+  const newSelectedIds = selectedCustomPocIds.value.filter(id => !currentPageIds.has(id))
+  currentPageSelectedIds.forEach(id => newSelectedIds.push(id))
+  selectedCustomPocIds.value = newSelectedIds
+
+  const otherPageItems = selectedCustomPocs.value.filter(p => !currentPageIds.has(p.id))
+  selectedCustomPocs.value = [...otherPageItems, ...currentPageSelectedItems]
+}
 
 async function selectAllNucleiTemplates() {
   selectAllNucleiLoading.value = true
+  isSelectingAll.value = true
   try {
-    const res = await getNucleiTemplateList({
-      page: 1, pageSize: 10000,
+    const filterArgs = {
       keyword: nucleiTemplateFilter.keyword, severity: nucleiTemplateFilter.severity,
       category: nucleiTemplateFilter.category, tag: nucleiTemplateFilter.tag
-    })
-    if(res.code === 0 && res.data && res.data.list) {
-      res.data.list.forEach(row => {
-        if (!selectedNucleiTemplates.value.find(s => s.id === row.id)) {
-          selectedNucleiTemplates.value.push(row)
-        }
-      })
-      updateNucleiTemplateIdsFromSelection()
-      loadNucleiTemplatesForSelect()
     }
-  } finally { selectAllNucleiLoading.value = false }
+    // 先拿 total
+    const firstRes = await getNucleiTemplateList({ page: 1, pageSize: 1, ...filterArgs })
+    if (firstRes.code !== 0) return
+    const total = firstRes.total || 0
+    if (total === 0) {
+      ElMessage.warning(t('task.noMatchingTemplate'))
+      return
+    }
+    // 分页拉全量（避免单次 pageSize 截断）
+    const pageSize = 5000
+    const totalPages = Math.ceil(total / pageSize)
+    const allRows = []
+    for (let page = 1; page <= totalPages; page++) {
+      const res = await getNucleiTemplateList({ page, pageSize, ...filterArgs })
+      if (res.code === 0 && res.list) allRows.push(...res.list)
+    }
+    // 合并去重
+    const existingIds = new Set(selectedNucleiTemplateIds.value)
+    allRows.forEach(row => {
+      if (!existingIds.has(row.id)) {
+        selectedNucleiTemplateIds.value.push(row.id)
+        selectedNucleiTemplates.value.push(row)
+      }
+    })
+    await nextTick()
+    if (nucleiTableRef.value) {
+      nucleiTemplateList.value.forEach(row => {
+        nucleiTableRef.value.toggleRowSelection(row, true)
+      })
+    }
+    ElMessage.success(`${t('task.selected')}: ${allRows.length}`)
+  } catch (e) {
+    console.error('selectAllNucleiTemplatesFailed', e)
+    ElMessage.error(t('task.selectAllFailed') || 'Select all failed')
+  } finally {
+    selectAllNucleiLoading.value = false
+    isSelectingAll.value = false
+  }
 }
 
 function deselectAllNucleiTemplates() {
   selectedNucleiTemplates.value = []
-  updateNucleiTemplateIdsFromSelection()
+  selectedNucleiTemplateIds.value = []
   if (nucleiTableRef.value) nucleiTableRef.value.clearSelection()
 }
 
 async function selectAllCustomPocs() {
   selectAllCustomLoading.value = true
+  isSelectingAll.value = true
   try {
-    const res = await getCustomPocList({
-      page: 1, pageSize: 10000,
+    const filterArgs = {
       name: customPocFilter.name, severity: customPocFilter.severity, tag: customPocFilter.tag
-    })
-    if(res.code === 0 && res.data && res.data.list) {
-      res.data.list.forEach(row => {
-         if (!selectedCustomPocs.value.find(s => s.id === row.id)) {
-           selectedCustomPocs.value.push(row)
-         }
-      })
-      updateCustomPocIdsFromSelection()
-      loadCustomPocsForSelect()
     }
-  } finally { selectAllCustomLoading.value = false }
+    const firstRes = await getCustomPocList({ page: 1, pageSize: 1, ...filterArgs })
+    if (firstRes.code !== 0) return
+    const total = firstRes.total || 0
+    if (total === 0) {
+      ElMessage.warning(t('task.noMatchingPoc'))
+      return
+    }
+    const pageSize = 5000
+    const totalPages = Math.ceil(total / pageSize)
+    const allRows = []
+    for (let page = 1; page <= totalPages; page++) {
+      const res = await getCustomPocList({ page, pageSize, ...filterArgs })
+      if (res.code === 0 && res.list) allRows.push(...res.list)
+    }
+    const existingIds = new Set(selectedCustomPocIds.value)
+    allRows.forEach(row => {
+      if (!existingIds.has(row.id)) {
+        selectedCustomPocIds.value.push(row.id)
+        selectedCustomPocs.value.push(row)
+      }
+    })
+    await nextTick()
+    if (customPocTableRef.value) {
+      customPocList.value.forEach(row => {
+        customPocTableRef.value.toggleRowSelection(row, true)
+      })
+    }
+    ElMessage.success(`${t('task.selected')}: ${allRows.length}`)
+  } catch (e) {
+    console.error('selectAllCustomPocsFailed', e)
+    ElMessage.error(t('task.selectAllFailed') || 'Select all failed')
+  } finally {
+    selectAllCustomLoading.value = false
+    isSelectingAll.value = false
+  }
 }
 
 function deselectAllCustomPocs() {
   selectedCustomPocs.value = []
-  updateCustomPocIdsFromSelection()
+  selectedCustomPocIds.value = []
   if (customPocTableRef.value) customPocTableRef.value.clearSelection()
 }
 
 function clearAllSelections() {
   selectedNucleiTemplates.value = []
+  selectedNucleiTemplateIds.value = []
   selectedCustomPocs.value = []
-  form.pocscanNucleiTemplateIds = []
-  form.pocscanCustomPocIds = []
+  selectedCustomPocIds.value = []
   if (nucleiTableRef.value) nucleiTableRef.value.clearSelection()
   if (customPocTableRef.value) customPocTableRef.value.clearSelection()
 }
 
 function clearNucleiSelections() {
   selectedNucleiTemplates.value = []
-  form.pocscanNucleiTemplateIds = []
+  selectedNucleiTemplateIds.value = []
   if (nucleiTableRef.value) nucleiTableRef.value.clearSelection()
 }
 
 function clearCustomPocSelections() {
   selectedCustomPocs.value = []
-  form.pocscanCustomPocIds = []
+  selectedCustomPocIds.value = []
   if (customPocTableRef.value) customPocTableRef.value.clearSelection()
-}
-
-function updateNucleiTemplateIdsFromSelection() {
-  form.pocscanNucleiTemplateIds = selectedNucleiTemplates.value.map(i => i.id)
-}
-function updateCustomPocIdsFromSelection() {
-  form.pocscanCustomPocIds = selectedCustomPocs.value.map(i => i.id)
 }
 
 function getSeverityType(severity) {
@@ -1849,6 +1942,8 @@ function handlePocModeChange(val) {
     form.pocscanCustomPocIds = []
     selectedNucleiTemplates.value = []
     selectedCustomPocs.value = []
+    selectedNucleiTemplateIds.value = []
+    selectedCustomPocIds.value = []
   }
 }
 
@@ -1936,36 +2031,54 @@ function handleEdit(row) {
   loadEditSelectionNames()
 }
 
+// 分页拉取直到命中所有 ID 或遍历完总数；用于编辑回显 POC 名称（避免 pageSize 截断）
+async function fetchMatchingByIds(apiFn, idSet, matcher) {
+  const pageSize = 5000
+  const firstRes = await apiFn({ page: 1, pageSize })
+  if (firstRes.code !== 0 || !firstRes.list) return []
+  const matched = firstRes.list.filter(matcher)
+  const total = firstRes.total || firstRes.list.length
+  const totalPages = Math.ceil(total / pageSize)
+  for (let page = 2; page <= totalPages; page++) {
+    if (matched.length >= idSet.size) break
+    const res = await apiFn({ page, pageSize })
+    if (res.code === 0 && res.list) matched.push(...res.list.filter(matcher))
+  }
+  return matched
+}
+
 // 编辑回显时，根据已保存的ID批量加载POC模板名称和字典名称
 async function loadEditSelectionNames() {
   // 恢复 POC 模板名称
   if (form.pocscanNucleiTemplateIds.length > 0) {
     try {
-      const res = await getNucleiTemplateList({ page: 1, pageSize: 200 })
-      if (res.code === 0 && res.data?.list) {
-        selectedNucleiTemplates.value = res.data.list.filter(t =>
-          form.pocscanNucleiTemplateIds.includes(t.id)
-        )
-      }
+      const idSet = new Set(form.pocscanNucleiTemplateIds)
+      const matched = await fetchMatchingByIds(getNucleiTemplateList, idSet, t => idSet.has(t.id))
+      selectedNucleiTemplates.value = matched
+      selectedNucleiTemplateIds.value = matched.map(t => t.id)
+      form.pocscanNucleiTemplates = matched
     } catch (e) {
       console.error('loadNucleiTemplateNamesFailed', e)
     }
   } else {
     selectedNucleiTemplates.value = []
+    selectedNucleiTemplateIds.value = []
+    form.pocscanNucleiTemplates = []
   }
   if (form.pocscanCustomPocIds.length > 0) {
     try {
-      const res = await getCustomPocList({ page: 1, pageSize: 200 })
-      if (res.code === 0 && res.data?.list) {
-        selectedCustomPocs.value = res.data.list.filter(p =>
-          form.pocscanCustomPocIds.includes(p.id)
-        )
-      }
+      const idSet = new Set(form.pocscanCustomPocIds)
+      const matched = await fetchMatchingByIds(getCustomPocList, idSet, p => idSet.has(p.id))
+      selectedCustomPocs.value = matched
+      selectedCustomPocIds.value = matched.map(p => p.id)
+      form.pocscanCustomPocs = matched
     } catch (e) {
       console.error('loadCustomPocNamesFailed', e)
     }
   } else {
     selectedCustomPocs.value = []
+    selectedCustomPocIds.value = []
+    form.pocscanCustomPocs = []
   }
   // 恢复目录扫描字典名称
   if (form.dirscanDictIds.length > 0) {
@@ -2031,6 +2144,12 @@ function showRecursiveDictSelectDialog() {
 }
 
 function showPocSelectDialog() {
+  // 从 form 恢复已选 ID 和对象（编辑回显后打开对话框时必需）
+  selectedNucleiTemplateIds.value = [...(form.pocscanNucleiTemplateIds || [])]
+  selectedCustomPocIds.value = [...(form.pocscanCustomPocIds || [])]
+  selectedNucleiTemplates.value = [...(form.pocscanNucleiTemplates || [])]
+  selectedCustomPocs.value = [...(form.pocscanCustomPocs || [])]
+  selectedPocSearchKeyword.value = ''
   pocSelectDialogVisible.value = true
 }
 
@@ -2058,23 +2177,31 @@ function confirmRecursiveDictSelection() {
 }
 
 function confirmPocSelection() {
-  form.pocscanNucleiTemplateIds = selectedNucleiTemplates.value.map(item => item.id)
-  form.pocscanCustomPocIds = selectedCustomPocs.value.map(item => item.id)
+  form.pocscanNucleiTemplateIds = [...selectedNucleiTemplateIds.value]
+  form.pocscanCustomPocIds = [...selectedCustomPocIds.value]
+  // 保存对象信息用于下次打开对话框时显示
+  form.pocscanNucleiTemplates = [...selectedNucleiTemplates.value]
+  form.pocscanCustomPocs = [...selectedCustomPocs.value]
   pocSelectDialogVisible.value = false
 }
 
 function removeNucleiTemplate(id) {
-  const idx = selectedNucleiTemplates.value.findIndex(item => item.id === id)
-  if (idx > -1) selectedNucleiTemplates.value.splice(idx, 1)
-  const idIdx = form.pocscanNucleiTemplateIds.indexOf(id)
-  if (idIdx > -1) form.pocscanNucleiTemplateIds.splice(idIdx, 1)
+  selectedNucleiTemplateIds.value = selectedNucleiTemplateIds.value.filter(i => i !== id)
+  selectedNucleiTemplates.value = selectedNucleiTemplates.value.filter(item => item.id !== id)
+  // 同步表格选中状态
+  if (nucleiTableRef.value) {
+    const row = nucleiTemplateList.value.find(t => t.id === id)
+    if (row) nucleiTableRef.value.toggleRowSelection(row, false)
+  }
 }
 
 function removeCustomPoc(id) {
-  const idx = selectedCustomPocs.value.findIndex(item => item.id === id)
-  if (idx > -1) selectedCustomPocs.value.splice(idx, 1)
-  const idIdx = form.pocscanCustomPocIds.indexOf(id)
-  if (idIdx > -1) form.pocscanCustomPocIds.splice(idIdx, 1)
+  selectedCustomPocIds.value = selectedCustomPocIds.value.filter(i => i !== id)
+  selectedCustomPocs.value = selectedCustomPocs.value.filter(item => item.id !== id)
+  if (customPocTableRef.value) {
+    const row = customPocList.value.find(p => p.id === id)
+    if (row) customPocTableRef.value.toggleRowSelection(row, false)
+  }
 }
 
 function viewPocContent(row, type) {
@@ -2121,6 +2248,8 @@ function showCreateDialog() {
   Object.assign(form, getDefaultForm())
   selectedNucleiTemplates.value = []
   selectedCustomPocs.value = []
+  selectedNucleiTemplateIds.value = []
+  selectedCustomPocIds.value = []
   // 重置Cron验证状态
   cronValidation.valid = false
   cronValidation.nextTimes = []
@@ -2330,20 +2459,23 @@ onMounted(() => {
 .poc-select-container {
   display: flex;
   gap: 20px;
-  height: 500px;
+  height: 520px;
 }
 
 .poc-select-left {
   flex: 1;
   overflow: auto;
+  min-width: 0;
 }
 
 .poc-select-right {
-  width: 280px;
+  width: 340px;
+  flex-shrink: 0;
   border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
   display: flex;
   flex-direction: column;
+  background: var(--el-fill-color-blank);
 }
 
 .selected-header {
@@ -2381,26 +2513,30 @@ onMounted(() => {
 
 .selected-items {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .selected-item {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 10px;
   background: var(--el-fill-color-light);
   border-radius: 3px;
   font-size: 12px;
-  max-width: 100%;
+}
+
+.selected-item:hover {
+  background: var(--el-fill-color);
 }
 
 .item-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
 }
 
 .item-remove {
