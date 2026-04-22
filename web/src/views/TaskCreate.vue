@@ -1534,6 +1534,15 @@ async function handleSubmit() {
     await formRef.value.validate()
   } catch (e) { return }
 
+  // 校验：至少启用一项扫描配置
+  const anyScanEnabled = form.domainscanEnable || form.portscanEnable ||
+    form.portidentifyEnable || form.fingerprintEnable ||
+    form.dirscanEnable || form.pocscanEnable
+  if (!anyScanEnabled) {
+    ElMessage.error(t('task.noScanConfigEnabled'))
+    return
+  }
+
   submitting.value = true
   try {
     // 清除防抖定时器，确保最新配置被保存
