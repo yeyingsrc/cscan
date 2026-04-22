@@ -267,11 +267,12 @@ func convertScannerAssetToModelAsset(task *model.MainTask, scanAsset *scanner.As
 	if asset.Source == "" {
 		asset.Source = "user_input"
 	}
-	if scanAsset.Category == "domain" {
+	switch scanAsset.Category {
+	case "domain":
 		asset.Domain = scanAsset.Host
-	} else if scanAsset.Category == "ipv4" {
+	case "ipv4":
 		asset.Ip.IpV4 = append(asset.Ip.IpV4, model.IPV4{IPName: scanAsset.Host})
-	} else if scanAsset.Category == "ipv6" {
+	case "ipv6":
 		asset.Ip.IpV6 = append(asset.Ip.IpV6, model.IPV6{IPName: scanAsset.Host})
 	}
 	for _, ip := range scanAsset.IPV4 {
