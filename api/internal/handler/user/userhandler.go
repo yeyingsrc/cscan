@@ -125,6 +125,25 @@ func UserResetPasswordHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	}
 }
 
+// UserFirstLoginResetPasswordHandler 首次登录密码重置（不需要原密码验证）
+func UserFirstLoginResetPasswordHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req types.UserFirstLoginResetPasswordReq
+		if err := httpx.Parse(r, &req); err != nil {
+			response.ParamError(w, err.Error())
+			return
+		}
+
+		l := logic.NewUserFirstLoginResetPasswordLogic(r.Context(), svcCtx)
+		resp, err := l.UserFirstLoginResetPassword(&req)
+		if err != nil {
+			response.Error(w, err)
+			return
+		}
+		httpx.OkJson(w, resp)
+	}
+}
+
 // SaveScanConfigHandler 保存用户扫描配置
 func SaveScanConfigHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

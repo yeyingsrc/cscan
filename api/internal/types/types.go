@@ -74,6 +74,12 @@ type UserResetPasswordReq struct {
 	NewPassword string `json:"newPassword"`
 }
 
+// UserFirstLoginResetPasswordReq 首次登录密码重置请求（不需要原密码验证）
+type UserFirstLoginResetPasswordReq struct {
+	Id          string `json:"id"`
+	NewPassword string `json:"newPassword"`
+}
+
 // ==================== 工作空间 ====================
 type Workspace struct {
 	Id          string `json:"id"`

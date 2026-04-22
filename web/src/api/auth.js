@@ -23,3 +23,8 @@ export function deleteUser(data) {
 export function resetUserPassword(data) {
   return request.post('/user/resetPassword', data)
 }
+
+// 首次登录密码重置（不需要原密码验证）
+export function firstLoginResetPassword(data) {
+  return request.post('/user/firstLoginResetPassword', data)
+}

@@ -239,6 +239,47 @@ func (l *UserResetPasswordLogic) UserResetPassword(req *types.UserResetPasswordR
 	return &types.BaseResp{Code: 0, Msg: "密码重置成功"}, nil
 }
 
+// UserFirstLoginResetPasswordLogic 首次登录密码重置逻辑
+type UserFirstLoginResetPasswordLogic struct {
+	logx.Logger
+	ctx    context.Context
+	svcCtx *svc.ServiceContext
+}
+
+func NewUserFirstLoginResetPasswordLogic(ctx context.Context, svcCtx *svc.ServiceContext) *UserFirstLoginResetPasswordLogic {
+	return &UserFirstLoginResetPasswordLogic{
+		Logger: logx.WithContext(ctx),
+		ctx:    ctx,
+		svcCtx: svcCtx,
+	}
+}
+
+func (l *UserFirstLoginResetPasswordLogic) UserFirstLoginResetPassword(req *types.UserFirstLoginResetPasswordReq) (resp *types.BaseResp, err error) {
+	// 检查用户是否存在
+	user, err := l.svcCtx.UserModel.FindById(l.ctx, req.Id)
+	if err != nil {
+		logx.Errorf("查询用户失败: %v", err)
+		return &types.BaseResp{Code: 500, Msg: "系统错误"}, nil
+	}
+	if user == nil {
+		return &types.BaseResp{Code: 404, Msg: "用户不存在"}, nil
+	}
+
+	// 验证用户是否处于必须修改密码状态
+	if !user.MustChangePassword {
+		return &types.BaseResp{Code: 403, Msg: "当前用户不需要修改密码"}, nil
+	}
+
+	// 重置密码（不验证原密码）
+	err = l.svcCtx.UserModel.UpdatePassword(l.ctx, req.Id, req.NewPassword)
+	if err != nil {
+		logx.Errorf("首次登录密码重置失败: %v", err)
+		return &types.BaseResp{Code: 500, Msg: "密码重置失败"}, nil
+	}
+
+	return &types.BaseResp{Code: 0, Msg: "密码重置成功"}, nil
+}
+
 // ScanConfigLogic 扫描配置逻辑
 type ScanConfigLogic struct {
 	logx.Logger

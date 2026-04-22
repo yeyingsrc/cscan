@@ -89,7 +89,7 @@ import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
 import { Sunny, Moon, Position } from '@element-plus/icons-vue'
-import { resetUserPassword } from '@/api/auth'
+import { firstLoginResetPassword } from '@/api/auth'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -163,7 +163,7 @@ async function handleResetSubmit() {
   await resetFormRef.value.validate()
   resetLoading.value = true
   try {
-    const res = await resetUserPassword({
+    const res = await firstLoginResetPassword({
       id: userStore.userId,
       newPassword: resetForm.newPassword
     })

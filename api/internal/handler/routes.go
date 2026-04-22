@@ -121,6 +121,7 @@ func RegisterHandlers(server *rest.Server, svcCtx *svc.ServiceContext) {
 		{Method: http.MethodPost, Path: "/api/v1/user/update", Handler: user.UserUpdateHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/user/delete", Handler: user.UserDeleteHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/user/resetPassword", Handler: user.UserResetPasswordHandler(svcCtx)},
+		{Method: http.MethodPost, Path: "/api/v1/user/firstLoginResetPassword", Handler: user.UserFirstLoginResetPasswordHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/user/scanConfig/save", Handler: user.SaveScanConfigHandler(svcCtx)},
 		{Method: http.MethodPost, Path: "/api/v1/user/scanConfig/get", Handler: user.GetScanConfigHandler(svcCtx)},
 
