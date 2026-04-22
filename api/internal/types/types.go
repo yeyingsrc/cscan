@@ -70,6 +70,7 @@ type UserDeleteReq struct {
 
 type UserResetPasswordReq struct {
 	Id          string `json:"id"`
+	OldPassword string `json:"oldPassword"`
 	NewPassword string `json:"newPassword"`
 }
 
