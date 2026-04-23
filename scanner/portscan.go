@@ -60,7 +60,7 @@ func (s *PortScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 	if !ok {
 		opts = &PortScanOptions{
 			Ports:      "21,22,23,25,80,443,3306,3389,6379,8080",
-			Timeout:    3,
+			Timeout:    5,
 			Concurrent: 100,
 		}
 	}
@@ -176,7 +176,7 @@ func (s *PortScanner) scanPorts(ctx context.Context, targets []string, ports []i
 				case <-ctx.Done():
 					return
 				default:
-					if isPortOpen(task.target, task.port, opts.Timeout) {
+					if isPortOpenWithContext(ctx, task.target, task.port, opts.Timeout) {
 						asset := &Asset{
 							Authority: utils.BuildTargetWithPort(task.target, task.port),
 							Host:      task.target,
@@ -223,6 +223,18 @@ func (s *PortScanner) scanPorts(ctx context.Context, targets []string, ports []i
 func isPortOpen(host string, port int, timeout int) bool {
 	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	conn, err := net.DialTimeout("tcp", address, time.Duration(timeout)*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// isPortOpenWithContext 检查端口是否开放（支持 context 取消）
+func isPortOpenWithContext(ctx context.Context, host string, port int, timeout int) bool {
+	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	d := net.Dialer{Timeout: time.Duration(timeout) * time.Second}
+	conn, err := d.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return false
 	}
