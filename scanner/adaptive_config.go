@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"runtime"
+	"sync"
 
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/zeromicro/go-zero/core/logx"
@@ -131,13 +132,16 @@ func getSystemTotalMemMB() uint64 {
 	return memInfo.Total / 1024 / 1024
 }
 
-// 全局自适应配置实例（懒加载）
-var globalAdaptiveConfig *AdaptiveScanConfig
+// 全局自适应配置实例（懒加载，线程安全）
+var (
+	globalAdaptiveConfig     *AdaptiveScanConfig
+	globalAdaptiveConfigOnce sync.Once
+)
 
-// GetGlobalAdaptiveConfig 获取全局自适应配置（单例，首次调用时初始化）
+// GetGlobalAdaptiveConfig 获取全局自适应配置（单例，首次调用时初始化，线程安全）
 func GetGlobalAdaptiveConfig() *AdaptiveScanConfig {
-	if globalAdaptiveConfig == nil {
+	globalAdaptiveConfigOnce.Do(func() {
 		globalAdaptiveConfig = GetAdaptiveScanConfig()
-	}
+	})
 	return globalAdaptiveConfig
 }
