@@ -2,10 +2,8 @@ package scanner
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -663,8 +661,8 @@ func (s *FingerprintScanner) getIconHashWithData(baseUrl string, htmlBody string
 				return false, "", nil
 			}
 
-			// 计算MD5 hash（用于显示）
-			return true, calculateIconHash(iconData), iconData
+			// 计算MMH3 hash（Shodan风格）- 与 asset.IconHash 和指纹匹配使用的格式一致
+			return true, CalculateMMH3Hash(iconData), iconData
 		}(path)
 
 		if match {
@@ -778,7 +776,7 @@ func (s *FingerprintScanner) fingerprint(ctx context.Context, asset *Asset, opts
 		if opts.IconHash {
 			iconHash, iconData := s.getIconHashWithData(targetUrl, asset.HttpBody)
 			if iconHash != "" {
-				asset.IconHash = iconHash
+				asset.IconHash = iconHash // getIconHashWithData 返回 MMH3 hash
 			}
 			// 计算MMH3 hash用于ARL格式指纹匹配
 			if len(iconData) > 0 {
@@ -1123,7 +1121,7 @@ func (s *FingerprintScanner) getIconHash(baseUrl string) string {
 			}
 
 			// 计算MMH3 hash (Shodan风格)
-			return true, calculateIconHash(iconData)
+			return true, CalculateMMH3Hash(iconData)
 		}(path)
 
 		if match {
@@ -1132,12 +1130,6 @@ func (s *FingerprintScanner) getIconHash(baseUrl string) string {
 	}
 
 	return ""
-}
-
-// calculateIconHash 计算icon hash
-func calculateIconHash(data []byte) string {
-	sum := md5.Sum(data)
-	return hex.EncodeToString(sum[:])
 }
 
 // takeScreenshot 使用chromedp截图
