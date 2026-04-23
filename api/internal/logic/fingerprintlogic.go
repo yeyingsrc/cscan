@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"cscan/api/internal/logic/common"
 	"cscan/api/internal/svc"
 	"cscan/api/internal/types"
 	"cscan/model"
@@ -1028,12 +1029,17 @@ func parseIntArray(v interface{}) []int {
 
 // FingerprintValidateLogic 验证指纹
 type FingerprintValidateLogic struct {
+	logx.Logger
 	ctx    context.Context
 	svcCtx *svc.ServiceContext
 }
 
 func NewFingerprintValidateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *FingerprintValidateLogic {
-	return &FingerprintValidateLogic{ctx: ctx, svcCtx: svcCtx}
+	return &FingerprintValidateLogic{
+		Logger: logx.WithContext(ctx),
+		ctx:    ctx,
+		svcCtx: svcCtx,
+	}
 }
 
 // FingerprintValidate 验证单个指纹是否能匹配目标URL（直接在API服务中执行）
@@ -1056,6 +1062,10 @@ func (l *FingerprintValidateLogic) FingerprintValidate(req *types.FingerprintVal
 	if err != nil {
 		return &types.FingerprintValidateResp{Code: 500, Msg: "获取目标数据失败: " + err.Error()}, nil
 	}
+
+	// 记录指纹验证日志，包含 icon_hash 信息
+	l.Logger.Infof("FingerprintValidate: fingerprintId=%s, name=%s, url=%s, icon_hash=%s, rule=%s",
+		fp.Id.Hex(), fp.Name, req.Url, data.FaviconHash, fp.Rule)
 
 	// 创建指纹引擎并验证
 	engine := NewSingleFingerprintEngine(fp)
@@ -1238,7 +1248,8 @@ func fetchFaviconHash(baseUrl, body string, client *http.Client) string {
 	}
 
 	// 5. 计算MMH3 hash (Shodan风格)
-	hash := calculateMMH3Hash(faviconBytes)
+	// 使用与扫描器一致的算法（无换行符）
+	hash := calculateMMH3HashSimple(faviconBytes)
 	return hash
 }
 
@@ -1279,6 +1290,18 @@ func calculateMMH3Hash(data []byte) string {
 	}
 
 	hash := mmh3Hash32([]byte(b64WithNewlines.String()))
+	return fmt.Sprintf("%d", int32(hash))
+}
+
+// calculateMMH3HashSimple 计算Shodan风格的MMH3 favicon hash（简化版，无换行）
+// 与扫描器 scanner/fingerprint.go 中的 CalculateMMH3Hash 算法一致
+func calculateMMH3HashSimple(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	// 直接使用 base64 编码，不添加换行符（与扫描器算法一致）
+	b64 := base64.StdEncoding.EncodeToString(data)
+	hash := mmh3Hash32([]byte(b64))
 	return fmt.Sprintf("%d", int32(hash))
 }
 
@@ -1351,8 +1374,11 @@ func matchRuleWithDetails(rule string, data *FingerprintData) (bool, []string) {
 		return false, nil
 	}
 
+	logx.Infof("matchRuleWithDetails: rule=%s", rule)
+
 	// 处理OR逻辑 (||)
 	parts := splitByOperator(rule, "||")
+	logx.Infof("matchRuleWithDetails: OR split result count=%d, parts=%v", len(parts), parts)
 	if len(parts) > 1 {
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
@@ -1384,6 +1410,7 @@ func matchRuleAndWithDetails(rule string, data *FingerprintData) (bool, []string
 	var matchedConditions []string
 
 	parts := splitByOperator(rule, "&&")
+	logx.Infof("matchRuleAndWithDetails: rule=%s, AND split count=%d, parts=%v", rule, len(parts), parts)
 	if len(parts) > 1 {
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
@@ -1470,24 +1497,33 @@ func matchSingleConditionWithDetails(condition string, data *FingerprintData) (b
 	var matchedValue string
 	condTypeLower := strings.ToLower(condType)
 
+	// 调试日志：记录匹配条件详情
+	logx.Infof("matchSingleCondition: condition=%s, condType=%s, value=%s, negate=%v", condition, condType, value, negate)
+	logx.Infof("matchSingleCondition: data.Body len=%d, data.Title=%s, data.HeaderString len=%d, data.Server=%s, data.FaviconHash=%s",
+		len(data.Body), data.Title, len(data.HeaderString), data.Server, data.FaviconHash)
+
 	switch condTypeLower {
 	case "body":
 		result = containsIgnoreCase(data.Body, value)
+		logx.Infof("matchSingleCondition body: result=%v, value=%s", result, value)
 		if result {
 			matchedValue = findMatchContext(data.Body, value, 50)
 		}
 	case "title":
 		result = containsIgnoreCase(data.Title, value)
+		logx.Infof("matchSingleCondition title: result=%v, value=%s, data.Title=%s", result, value, data.Title)
 		if result {
 			matchedValue = data.Title
 		}
 	case "header":
 		result = containsIgnoreCase(data.HeaderString, value)
+		logx.Infof("matchSingleCondition header: result=%v, value=%s", result, value)
 		if result {
 			matchedValue = findMatchContext(data.HeaderString, value, 100)
 		}
 	case "server":
 		result = containsIgnoreCase(data.Server, value)
+		logx.Infof("matchSingleCondition server: result=%v, value=%s, data.Server=%s", result, value, data.Server)
 		if result {
 			matchedValue = data.Server
 		}
@@ -1503,10 +1539,12 @@ func matchSingleConditionWithDetails(condition string, data *FingerprintData) (b
 		}
 	case "icon_hash", "favicon_hash":
 		result = data.FaviconHash == value
+		logx.Infof("matchSingleCondition icon_hash: result=%v, expected=%s, actual=%s", result, value, data.FaviconHash)
 		if result {
 			matchedValue = data.FaviconHash
 		}
 	default:
+		logx.Infof("matchSingleCondition: unknown condition type %s", condTypeLower)
 		return false, ""
 	}
 
@@ -1898,14 +1936,17 @@ func (l *FingerprintMatchAssetsLogic) FingerprintMatchAssets(req *types.Fingerpr
 
 	startTime := time.Now()
 
+	// 调试：记录 workspaceId
+	l.Logger.Infof("FingerprintMatchAssets: START, fingerprintId=%s, workspaceId=%s", req.FingerprintId, workspaceId)
+
 	// 获取指纹
 	fp, err := l.svcCtx.FingerprintModel.FindById(l.ctx, req.FingerprintId)
 	if err != nil {
+		l.Logger.Errorf("FingerprintMatchAssets: fingerprint not found, id=%s, err=%v", req.FingerprintId, err)
 		return &types.FingerprintMatchAssetsResp{Code: 404, Msg: "指纹不存在"}, nil
 	}
+	l.Logger.Infof("FingerprintMatchAssets: fingerprint found, name=%s, rule=%s", fp.Name, fp.Rule)
 
-	// 获取资产列表（只获取有HTTP响应数据的资产）
-	assetModel := l.svcCtx.GetAssetModel(workspaceId)
 	// 查询有 body 或 header 或 title 的资产（字段带 omitempty，需同时检查 $exists）
 	filter := bson.M{
 		"$or": bson.A{
@@ -1916,12 +1957,27 @@ func (l *FingerprintMatchAssetsLogic) FingerprintMatchAssets(req *types.Fingerpr
 		},
 	}
 
-	assets, err := assetModel.FindFull(l.ctx, filter, 0, 0)
-	if err != nil {
-		return &types.FingerprintMatchAssetsResp{Code: 500, Msg: "获取资产列表失败: " + err.Error()}, nil
+	// 获取需要查询的工作空间列表（支持多工作空间查询）
+	wsIds := common.GetWorkspaceIds(l.ctx, l.svcCtx, workspaceId)
+	l.Logger.Infof("FingerprintMatchAssets: querying workspaces: %v", wsIds)
+
+	// 收集所有工作空间的资产
+	var allAssets []model.Asset
+	for _, wsId := range wsIds {
+		assetModel := l.svcCtx.GetAssetModel(wsId)
+		assets, err := assetModel.FindFull(l.ctx, filter, 0, 0)
+		if err != nil {
+			l.Logger.Errorf("FingerprintMatchAssets: query assets failed for workspace %s, err=%v", wsId, err)
+			continue
+		}
+		l.Logger.Infof("FingerprintMatchAssets: workspace %s found %d assets", wsId, len(assets))
+		allAssets = append(allAssets, assets...)
 	}
 
-	l.Logger.Infof("FingerprintMatchAssets: fingerprintId=%s, name=%s, totalAssets=%d, updateAsset=%v", req.FingerprintId, fp.Name, len(assets), req.UpdateAsset)
+	assets := allAssets
+	l.Logger.Infof("FingerprintMatchAssets: total assets found across all workspaces: %d, rule=%s", len(assets), fp.Rule)
+
+	l.Logger.Infof("FingerprintMatchAssets: fingerprintId=%s, name=%s, totalAssets=%d, updateAsset=%v, rule=%s", req.FingerprintId, fp.Name, len(assets), req.UpdateAsset, fp.Rule)
 
 	// 创建指纹引擎
 	engine := NewSingleFingerprintEngine(fp)
@@ -1930,14 +1986,31 @@ func (l *FingerprintMatchAssetsLogic) FingerprintMatchAssets(req *types.Fingerpr
 	var matchedList []types.FingerprintMatchedAsset
 	var updatedCount int
 	for _, asset := range assets {
+		// 计算 MMH3 hash（如果存储了原始图标数据）
+		mmh3Hash := asset.IconHash
+		if len(asset.IconHashBytes) > 0 {
+			// 使用与扫描器相同的算法计算 MMH3 hash
+			mmh3Hash = calculateMMH3HashSimple(asset.IconHashBytes)
+		}
+
 		// 构建指纹数据
 		data := &FingerprintData{
 			Title:        asset.Title,
 			Body:         asset.HttpBody,
 			HeaderString: asset.HttpHeader,
 			Server:       asset.Server,
-			FaviconHash:  asset.IconHash,
+			FaviconHash:  mmh3Hash,
 			URL:          asset.Authority,
+		}
+
+		// 调试日志：显示前几个资产的匹配数据
+		if len(matchedList) < 3 {
+			bodyPreview := asset.HttpBody
+			if len(bodyPreview) > 100 {
+				bodyPreview = bodyPreview[:100] + "..."
+			}
+			l.Logger.Infof("FingerprintMatchAssets: checking asset authority=%s, title=%s, body_len=%d, iconHash=%s, body_preview=%s",
+				asset.Authority, asset.Title, len(asset.HttpBody), asset.IconHash, bodyPreview)
 		}
 
 		// 解析 Header 字符串为 map
@@ -1946,7 +2019,9 @@ func (l *FingerprintMatchAssetsLogic) FingerprintMatchAssets(req *types.Fingerpr
 		}
 
 		// 执行匹配
-		if matched, _ := engine.MatchWithDetails(data); matched {
+		matched, _ := engine.MatchWithDetails(data)
+		if matched {
+			l.Logger.Infof("FingerprintMatchAssets: MATCHED asset=%s, title=%s", asset.Authority, asset.Title)
 			matchedList = append(matchedList, types.FingerprintMatchedAsset{
 				Id:        asset.Id.Hex(),
 				Authority: asset.Authority,
@@ -1977,6 +2052,20 @@ func (l *FingerprintMatchAssetsLogic) FingerprintMatchAssets(req *types.Fingerpr
 						"last_status_change_time": time.Now(),
 					}
 
+					// 找到该资产所属的工作空间
+					assetWorkspaceId := common.GetDefaultWorkspaceId(l.ctx, l.svcCtx, workspaceId)
+					if len(wsIds) > 1 || workspaceId == "" || workspaceId == "all" {
+						// 如果是多工作空间查询，需要找到该资产实际所属的工作空间
+						for _, wsId := range wsIds {
+							testAssetModel := l.svcCtx.GetAssetModel(wsId)
+							_, err := testAssetModel.FindById(l.ctx, asset.Id.Hex())
+							if err == nil {
+								assetWorkspaceId = wsId
+								break
+							}
+						}
+					}
+					assetModel := l.svcCtx.GetAssetModel(assetWorkspaceId)
 					err := assetModel.Update(l.ctx, asset.Id.Hex(), update)
 					if err == nil {
 						updatedCount++
