@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,59 @@ import (
 	"github.com/zeromicro/go-zero/core/logx"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+// AssetCache 资产缓存，用于批量处理时减少数据库查询
+type AssetCache struct {
+	assets map[string]*model.Asset
+}
+
+func NewAssetCache() *AssetCache {
+	return &AssetCache{
+		assets: make(map[string]*model.Asset),
+	}
+}
+
+func (c *AssetCache) getKey(host string, port int) string {
+	return fmt.Sprintf("%s:%d", host, port)
+}
+
+func (c *AssetCache) getOrCreate(ctx context.Context, assetModel *model.AssetModel, host string, port int) *model.Asset {
+	key := c.getKey(host, port)
+	if asset, ok := c.assets[key]; ok {
+		return asset
+	}
+
+	// 从数据库查询
+	asset, _ := assetModel.FindByHostPort(ctx, host, port)
+	if asset == nil {
+		// 资产不存在，创建一个新的
+		asset = &model.Asset{
+			Host:        host,
+			Port:        port,
+			Authority:   fmt.Sprintf("%s:%d", host, port),
+			Service:     "http",
+			IsHTTP:      true,
+			Source:      "poc_scan",
+			CreateTime:  time.Now(),
+			UpdateTime:  time.Now(),
+		}
+		// 设置 HTTPS 端口
+		if port == 443 || port == 8443 {
+			asset.Service = "https"
+		}
+		// 插入数据库
+		if err := assetModel.Insert(ctx, asset); err != nil {
+			logx.Errorf("Failed to create asset for vul: %v", err)
+			return nil
+		}
+		// 查询获取完整对象
+		asset, _ = assetModel.FindByHostPort(ctx, host, port)
+	}
+	if asset != nil {
+		c.assets[key] = asset
+	}
+	return asset
+}
 
 type SaveVulResultLogic struct {
 	ctx    context.Context
@@ -48,13 +102,41 @@ func (l *SaveVulResultLogic) SaveVulResult(in *pb.SaveVulResultReq) (*pb.SaveVul
 	}
 
 	vulModel := l.svcCtx.GetVulModel(workspaceId)
+	assetModel := l.svcCtx.GetAssetModel(workspaceId)
+
+	// 创建资产缓存，减少重复查询
+	assetCache := NewAssetCache()
+
+	// 按资产分组计算风险评分
+	assetRiskMap := make(map[string]float64) // Key: "host:port", Value: maxScore
+	assetVulCount := make(map[string]int)    // Key: "host:port", Value: vul count
+
 	var savedCount int32
 
 	for _, pbVul := range in.Vuls {
+		// 解析 URL 获取 host 和 port（如果 Authority 为空）
+		host := pbVul.Host
+		port := int(pbVul.Port)
+
+		if host == "" && pbVul.Url != "" {
+			// 从 URL 解析 host 和 port
+			parsedHost, parsedPort := parseHostFromUrl(pbVul.Url)
+			if parsedHost != "" {
+				host = parsedHost
+				if port == 0 {
+					port = parsedPort
+				}
+			}
+		}
+
+		// 确保资产存在（自动创建），放入缓存供后续批量更新使用
+		assetCache.getOrCreate(l.ctx, assetModel, host, port)
+
+		// 构建漏洞对象
 		vul := &model.Vul{
 			Authority: pbVul.Authority,
-			Host:      pbVul.Host,
-			Port:      int(pbVul.Port),
+			Host:      host,
+			Port:      port,
 			Url:       pbVul.Url,
 			PocFile:   pbVul.PocFile,
 			Source:    pbVul.Source,
@@ -122,24 +204,17 @@ func (l *SaveVulResultLogic) SaveVulResult(in *pb.SaveVulResultReq) (*pb.SaveVul
 			continue
 		}
 		savedCount++
-	}
 
-	// Update assets with risk scores
-	// Group vulns by asset (Host:Port) to aggregate risk score
-	assetRiskMap := make(map[string]float64) // Key: "host:port", Value: maxScore
-
-	for _, pbVul := range in.Vuls {
-		key := fmt.Sprintf("%s:%d", pbVul.Host, pbVul.Port)
-		score := 0.0
-		if pbVul.CvssScore != nil {
-			score = *pbVul.CvssScore
-		}
+		// 记录风险评分用于后续更新资产
+		key := fmt.Sprintf("%s:%d", host, port)
+		score := vul.CvssScore * 10 // CVSS 10分制转换为 100分制
 		if val, ok := assetRiskMap[key]; !ok || score > val {
 			assetRiskMap[key] = score
 		}
+		assetVulCount[key]++
 	}
 
-	assetModel := l.svcCtx.GetAssetModel(workspaceId)
+	// 批量更新资产风险评分
 	for key, maxScore := range assetRiskMap {
 		parts := strings.Split(key, ":")
 		if len(parts) != 2 {
@@ -148,43 +223,94 @@ func (l *SaveVulResultLogic) SaveVulResult(in *pb.SaveVulResultReq) (*pb.SaveVul
 		host := parts[0]
 		port, _ := strconv.Atoi(parts[1])
 
-		// Find existing asset
-		asset, err := assetModel.FindByHostPort(l.ctx, host, port)
-		if err != nil || asset == nil {
+		asset := assetCache.getOrCreate(l.ctx, assetModel, host, port)
+		if asset == nil {
 			continue
 		}
 
-		// Determine Risk Level
+		// Determine Risk Level based on CVSS score (already converted to 100 scale)
 		riskLevel := "info"
-		if maxScore >= 9.0 {
+		if maxScore >= 90 {
 			riskLevel = "critical"
-		} else if maxScore >= 7.0 {
+		} else if maxScore >= 70 {
 			riskLevel = "high"
-		} else if maxScore >= 4.0 {
+		} else if maxScore >= 40 {
 			riskLevel = "medium"
 		} else if maxScore > 0 {
 			riskLevel = "low"
 		}
 
-		// Update if new score is higher
+		// Update asset with risk score
 		update := bson.M{
 			"last_scan_time": time.Now(),
+			"vul_count":     assetVulCount[key],
 		}
+
+		// Update if new score is higher
 		if maxScore > asset.RiskScore {
 			update["risk_score"] = maxScore
 			update["risk_level"] = riskLevel
 		}
 
-		if err := assetModel.Update(l.ctx, asset.Id.Hex(), update); err != nil {
-			l.Logger.Errorf("Failed to update asset risk: %v", err)
+		// Also update if this is a new vulnerability (increase count but don't decrease score)
+		if _, exists := assetCache.assets[key]; exists {
+			// Asset was already in cache, update the risk if higher
+			if maxScore > asset.RiskScore {
+				if err := assetModel.Update(l.ctx, asset.Id.Hex(), update); err != nil {
+					l.Logger.Errorf("Failed to update asset risk: %v", err)
+				}
+			}
+		} else {
+			// New asset, insert it (already done by getOrCreate)
+			l.Logger.Infof("[SaveVulResult] Created new asset for vulnerability: %s:%d, risk_score: %.1f", host, port, maxScore)
 		}
 	}
 
-	l.Logger.Infof("SaveVulResult: saved %d vulnerabilities", savedCount)
+	l.Logger.Infof("SaveVulResult: saved %d vulnerabilities, updated %d assets", savedCount, len(assetRiskMap))
+
+	// 打印保存成功的漏洞详情
+	for _, pbVul := range in.Vuls {
+		vulName := ""
+		if pbVul.VulName != nil {
+			vulName = *pbVul.VulName
+		}
+		l.Logger.Infof("[SaveVulResult] Saved vul: host=%s, port=%d, url=%s, pocFile=%s, severity=%s, vulName=%s",
+			pbVul.Host, pbVul.Port, pbVul.Url, pbVul.PocFile, pbVul.Severity, vulName)
+	}
 
 	return &pb.SaveVulResultResp{
 		Success: true,
 		Message: "Vulnerabilities saved successfully",
 		Total:   savedCount,
 	}, nil
+}
+
+// parseHostFromUrl 从 URL 解析 host 和 port
+func parseHostFromUrl(rawUrl string) (string, int) {
+	if rawUrl == "" {
+		return "", 0
+	}
+
+	// 确保 URL 有协议前缀
+	if !strings.Contains(rawUrl, "://") {
+		rawUrl = "http://" + rawUrl
+	}
+
+	u, err := url.Parse(rawUrl)
+	if err != nil {
+		return "", 0
+	}
+
+	host := u.Hostname()
+	port := 80 // 默认 HTTP 端口
+
+	if u.Port() != "" {
+		if p, err := strconv.Atoi(u.Port()); err == nil {
+			port = p
+		}
+	} else if u.Scheme == "https" {
+		port = 443
+	}
+
+	return host, port
 }
