@@ -163,7 +163,7 @@ echo ========================================
 echo [CSCAN] Installation Successful!
 echo ========================================
 echo.
-echo URL: https://localhost:3443
+echo URL: https://localhost:7777
 echo Account: admin / 123456
 echo.
 echo Note: Deploy workers before scanning.

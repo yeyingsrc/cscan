@@ -316,7 +316,7 @@ show_install_success() {
     echo ""
     warning "访问地址："
     for ip in $(get_local_ips); do
-        echo "  https://$ip:3443"
+        echo "  https://$ip:7777"
     done
     echo ""
     warning "默认账号: admin / 123456"

@@ -101,7 +101,7 @@ services:
       - TZ=Asia/Shanghai
     ports:
       - "3000:80"
-      - "3443:443"
+      - "7777:443"
     volumes:
       - cscan_ssl_certs:/etc/nginx/ssl
     depends_on:
