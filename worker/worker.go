@@ -1109,6 +1109,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 
 	var allAssets []*scanner.Asset
 	var allVuls []*scanner.Vulnerability
+	var skippedHosts []string // 因端口阈值超限被跳过的主机
 
 	// 解析扫描配置
 	config, err := scheduler.ParseTaskConfig(task.Config)
@@ -1628,9 +1629,14 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 			if err != nil {
 				w.taskLog(task.TaskId, LevelError, "Masscan error: %v", err)
 			}
-			if masscanResult != nil && len(masscanResult.Assets) > 0 {
-				openPorts = masscanResult.Assets
-				w.taskLog(task.TaskId, LevelInfo, "Found %d open ports", len(openPorts))
+			if masscanResult != nil {
+				if len(masscanResult.Assets) > 0 {
+					openPorts = masscanResult.Assets
+					w.taskLog(task.TaskId, LevelInfo, "Found %d open ports", len(openPorts))
+				}
+				if len(masscanResult.SkippedHosts) > 0 {
+					skippedHosts = append(skippedHosts, masscanResult.SkippedHosts...)
+				}
 			}
 		default: // naabu
 			w.taskLog(task.TaskId, LevelInfo, "Port scan: Naabu")
@@ -1656,9 +1662,14 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 			if err != nil && err != scanner.ErrPortThresholdExceeded {
 				w.taskLog(task.TaskId, LevelError, "Naabu error: %v", err)
 			}
-			if naabuResult != nil && len(naabuResult.Assets) > 0 {
-				openPorts = naabuResult.Assets
-				w.taskLog(task.TaskId, LevelInfo, "Found %d open ports", len(openPorts))
+			if naabuResult != nil {
+				if len(naabuResult.Assets) > 0 {
+					openPorts = naabuResult.Assets
+					w.taskLog(task.TaskId, LevelInfo, "Found %d open ports", len(openPorts))
+				}
+				if len(naabuResult.SkippedHosts) > 0 {
+					skippedHosts = append(skippedHosts, naabuResult.SkippedHosts...)
+				}
 			}
 		}
 
@@ -1684,6 +1695,9 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		}
 
 		portCancel() // 释放端口扫描上下文
+		if len(skippedHosts) > 0 {
+			w.taskLog(task.TaskId, LevelWarn, "Port scan: %d hosts skipped due to port threshold: %v", len(skippedHosts), skippedHosts)
+		}
 		completedPhases["portscan"] = true
 		// 端口扫描模块完成，递增子任务进度
 		w.incrSubTaskDone(ctx, task, "端口扫描")
@@ -1697,8 +1711,10 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 	// 执行端口识别（Nmap服务识别）- 独立阶段
 	if config.PortIdentify != nil && config.PortIdentify.Enable && !completedPhases["portidentify"] {
 		// 强制扫描模式：没有资产时从用户输入目标生成资产
+		// GenerateAssetsFromTargets 已过滤DNS解析失败的域名
 		if len(allAssets) == 0 && target != "" && config.PortIdentify.ForceScan {
 			generatedAssets := scanner.GenerateAssetsFromTargets(target)
+			generatedAssets = filterSkippedHostsAssets(generatedAssets, skippedHosts)
 			if len(generatedAssets) > 0 {
 				allAssets = append(allAssets, generatedAssets...)
 				w.taskLog(task.TaskId, LevelInfo, "Port identify: generated %d assets from target (force scan)", len(generatedAssets))
@@ -1739,8 +1755,10 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 	// 执行指纹识别
 	if config.Fingerprint != nil && config.Fingerprint.Enable && !completedPhases["fingerprint"] {
 		// 强制扫描模式：没有资产时从用户输入目标生成资产
+		// GenerateAssetsFromTargets 已过滤DNS解析失败的域名
 		if len(allAssets) == 0 && target != "" && config.Fingerprint.ForceScan {
 			generatedAssets := scanner.GenerateAssetsFromTargets(target)
+			generatedAssets = filterSkippedHostsAssets(generatedAssets, skippedHosts)
 			if len(generatedAssets) > 0 {
 				allAssets = append(allAssets, generatedAssets...)
 				w.taskLog(task.TaskId, LevelInfo, "Fingerprint: generated %d assets from target (force scan)", len(generatedAssets))
@@ -1878,6 +1896,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 							originalAsset.HttpBody = fpAsset.HttpBody
 							originalAsset.Server = fpAsset.Server
 							originalAsset.IconHash = fpAsset.IconHash
+							originalAsset.IsHTTP = fpAsset.IsHTTP
 							if len(fpAsset.IconData) > 0 {
 								originalAsset.IconData = fpAsset.IconData
 							}
@@ -1905,6 +1924,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		// 强制扫描模式：没有资产时从用户输入目标生成资产
 		if len(allAssets) == 0 && target != "" && config.DirScan.ForceScan {
 			generatedAssets := scanner.GenerateAssetsFromTargets(target)
+			generatedAssets = filterSkippedHostsAssets(generatedAssets, skippedHosts)
 			if len(generatedAssets) > 0 {
 				allAssets = append(allAssets, generatedAssets...)
 				w.taskLog(task.TaskId, LevelInfo, "Dir scan: generated %d assets from target (force scan)", len(generatedAssets))
@@ -1948,6 +1968,7 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		// 强制扫描模式：没有资产时从用户输入目标生成资产
 		if len(allAssets) == 0 && target != "" && config.PocScan.ForceScan {
 			generatedAssets := scanner.GenerateAssetsFromTargets(target)
+			generatedAssets = filterSkippedHostsAssets(generatedAssets, skippedHosts)
 			if len(generatedAssets) > 0 {
 				allAssets = append(allAssets, generatedAssets...)
 				w.taskLog(task.TaskId, LevelInfo, "POC scan: generated %d assets from target (force scan)", len(generatedAssets))
@@ -2056,6 +2077,13 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 					pocTimeout := targetTimeout * len(allAssets) / pocConcurrency
 					if pocTimeout < 60 {
 						pocTimeout = 60
+					}
+					// 设置总超时上限，避免单批次POC扫描阻塞过久
+					// 最大不超过1800秒（30分钟），超时后返回已有结果
+					maxPocTimeout := 1800
+					if pocTimeout > maxPocTimeout {
+						w.taskLog(task.TaskId, LevelInfo, "POC scan: timeout capped from %ds to %ds", pocTimeout, maxPocTimeout)
+						pocTimeout = maxPocTimeout
 					}
 					w.taskLog(task.TaskId, LevelInfo, "POC scan: total timeout=%ds (single=%ds, assets=%d, concurrency=%d)",
 						pocTimeout, targetTimeout, len(allAssets), pocConcurrency)
@@ -3020,43 +3048,22 @@ func (w *Worker) loadCustomFingerprints(ctx context.Context, fpScanner *scanner.
 	}
 }
 
-// filterByPortThreshold 根据端口阈值过滤资产
-// 如果某个主机开放的端口数量超过阈值，则过滤掉该主机的所有资产（可能是防火墙或蜜罐）
-// 返回值: 过滤后的资产列表, 是否有主机超过阈值
-func filterByPortThreshold(assets []*scanner.Asset, threshold int) ([]*scanner.Asset, bool) {
-	if threshold <= 0 {
-		return assets, false // 阈值为0或负数表示不过滤
+// filterSkippedHostsAssets 过滤掉因端口阈值超限被跳过的主机的资产
+func filterSkippedHostsAssets(assets []*scanner.Asset, skippedHosts []string) []*scanner.Asset {
+	if len(skippedHosts) == 0 || len(assets) == 0 {
+		return assets
 	}
-
-	// 统计每个主机的开放端口数量
-	hostPortCount := make(map[string]int)
-	for _, asset := range assets {
-		hostPortCount[asset.Host]++
+	skippedSet := make(map[string]bool, len(skippedHosts))
+	for _, h := range skippedHosts {
+		skippedSet[h] = true
 	}
-
-	// 找出需要过滤的主机
-	filteredHosts := make(map[string]bool)
-	thresholdExceeded := false
-	for host, count := range hostPortCount {
-		if count > threshold {
-			filteredHosts[host] = true
-			thresholdExceeded = true
-			logx.Infof("Host %s has %d open ports (threshold: %d), filtered as potential honeypot/firewall", host, count, threshold)
+	var result []*scanner.Asset
+	for _, a := range assets {
+		if !skippedSet[a.Host] {
+			result = append(result, a)
 		}
 	}
-
-	// 过滤资产
-	if len(filteredHosts) == 0 {
-		return assets, false
-	}
-
-	result := make([]*scanner.Asset, 0, len(assets))
-	for _, asset := range assets {
-		if !filteredHosts[asset.Host] {
-			result = append(result, asset)
-		}
-	}
-	return result, thresholdExceeded
+	return result
 }
 
 // executePocValidateTask 执行POC验证任务
@@ -4131,6 +4138,7 @@ func (w *Worker) generateHTTPAssetsFromTarget(target string) []*scanner.Asset {
 // - 域名: example.com
 // - 带端口: 192.168.1.1:8080 或 example.com:443
 // - URL: http://example.com:8080
+// 域名无法解析到有效IPv4/IPv6地址时，该目标会被跳过
 func (w *Worker) generateAssetsFromTarget(target string, portConfig *scheduler.PortScanConfig) []*scanner.Asset {
 	var assets []*scanner.Asset
 
@@ -4153,8 +4161,10 @@ func (w *Worker) generateAssetsFromTarget(target string, portConfig *scheduler.P
 		// 处理URL格式
 		if strings.HasPrefix(t, "http://") || strings.HasPrefix(t, "https://") {
 			asset := w.parseURLToAsset(t)
-			if asset != nil {
+			if asset != nil && w.isDomainResolvable(asset.Host) {
 				assets = append(assets, asset)
+			} else if asset != nil {
+				w.logger.Info("Skipping target %s: domain cannot be resolved to valid IP", asset.Host)
 			}
 			continue
 		}
@@ -4167,6 +4177,10 @@ func (w *Worker) generateAssetsFromTarget(target string, portConfig *scheduler.P
 				port := 80
 				if p, err := strconv.Atoi(parts[1]); err == nil {
 					port = p
+				}
+				if !w.isDomainResolvable(host) {
+					w.logger.Info("Skipping target %s: domain cannot be resolved to valid IP", host)
+					continue
 				}
 				asset := &scanner.Asset{
 					Host:      host,
@@ -4192,6 +4206,11 @@ func (w *Worker) generateAssetsFromTarget(target string, portConfig *scheduler.P
 		}
 
 		// 单个主机（IP或域名），使用默认端口
+		// 域名目标需先验证DNS解析
+		if !w.isDomainResolvable(t) {
+			w.logger.Info("Skipping target %s: domain cannot be resolved to valid IP", t)
+			continue
+		}
 		for _, port := range defaultPorts {
 			asset := &scanner.Asset{
 				Host:      t,
@@ -4204,6 +4223,30 @@ func (w *Worker) generateAssetsFromTarget(target string, portConfig *scheduler.P
 	}
 
 	return assets
+}
+
+// isDomainResolvable 检查域名目标是否可以解析到有效的IPv4/IPv6地址
+// IP地址目标直接返回true
+func (w *Worker) isDomainResolvable(host string) bool {
+	if host == "" {
+		return false
+	}
+	// IP地址直接可用，无需DNS解析
+	if net.ParseIP(host) != nil {
+		return true
+	}
+	// 域名：尝试DNS解析
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		return false
+	}
+	// 至少有一个非回环地址
+	for _, ip := range ips {
+		if !ip.IsLoopback() {
+			return true
+		}
+	}
+	return false
 }
 
 // parseURLToAsset 解析URL为资产
