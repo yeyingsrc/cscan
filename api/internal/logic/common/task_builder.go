@@ -265,6 +265,10 @@ func convertScannerAssetToModelAsset(task *model.MainTask, scanAsset *scanner.As
 	if asset.Source == "" {
 		asset.Source = "user_input"
 	}
+	// 复制 IconData 到 IconHashBytes（用于指纹匹配时重新计算 MMH3 hash）
+	if len(scanAsset.IconData) > 0 {
+		asset.IconHashBytes = scanAsset.IconData
+	}
 	switch scanAsset.Category {
 	case "domain":
 		asset.Domain = scanAsset.Host
