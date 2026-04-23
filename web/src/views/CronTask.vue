@@ -715,7 +715,7 @@
           </el-collapse-item>
 
           <!-- 高级设置 -->
-          <el-collapse-item name="advanced">
+          <!-- <el-collapse-item name="advanced">
             <template #title>
               <span class="collapse-title">{{ $t('task.advancedSettings') }}</span>
             </template>
@@ -723,7 +723,7 @@
               <el-input-number v-model="form.batchSize" :min="0" :max="1000" :step="10" />
               <span class="form-hint">{{ $t('task.batchTargetCount') }}</span>
             </el-form-item>
-          </el-collapse-item>
+          </el-collapse-item> -->
         </el-collapse>
       </el-form>
       <template #footer>

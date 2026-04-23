@@ -575,11 +575,11 @@
           </el-collapse-item>
 
           <!-- 高级设置 -->
-          <el-collapse-item name="advanced">
+          <!-- <el-collapse-item name="advanced">
             <template #title>
               <span class="collapse-title">{{ $t('task.advancedSettings') }}</span>
             </template>
-          </el-collapse-item>
+          </el-collapse-item> -->
         </el-collapse>
 
         <!-- 操作按钮 -->

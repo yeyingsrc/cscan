@@ -885,14 +885,14 @@
         </el-tab-pane>
 
         <!-- 高级设置 Tab -->
-        <el-tab-pane :label="$t('task.advancedSettings')" name="advanced">
+        <!-- <el-tab-pane :label="$t('task.advancedSettings')" name="advanced">
           <el-form label-width="100px" class="tab-form">
             <el-form-item :label="$t('task.taskSplit')">
               <el-input-number v-model="form.batchSize" :min="0" :max="1000" :step="10" />
               <span class="form-hint">{{ $t('task.batchTargetCount') }}</span>
             </el-form-item>
           </el-form>
-        </el-tab-pane>
+        </el-tab-pane> -->
       </el-tabs>
       <template #footer>
         <div class="dialog-footer">
