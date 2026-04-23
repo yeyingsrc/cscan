@@ -149,6 +149,7 @@ func ParseTargetsForFingerprint(target string) []*ParsedTarget {
 
 // GenerateAssetsFromTargets 从用户输入的目标生成资产列表
 // 用于当用户只勾选部分扫描模块时，直接使用输入目标进行扫描
+// 域名无法解析到有效IPv4/IPv6地址时，该目标会被跳过
 func GenerateAssetsFromTargets(target string) []*Asset {
 	return generateAssetsFromTargetsWithResolver(target, &stdlibResolver{})
 }
@@ -177,8 +178,11 @@ func generateAssetsFromTargetsWithResolver(target string, resolver dnsResolver) 
 
 		// 用户明确指定了协议或端口时，只生成对应的单个资产
 		if info.Protocol != "" || info.HasPort {
-			pt := parseSingleTarget(info)
-			assets = append(assets, buildAssetFromParsed(pt, category, resolver))
+			asset := buildAssetFromParsed(parseSingleTarget(info), category, resolver)
+			if asset == nil {
+				continue
+			}
+			assets = append(assets, asset)
 		} else {
 			// 用户输入纯域名/IP（无协议无端口），默认传不带端口的目标
 			asset := &Asset{
@@ -190,7 +194,12 @@ func generateAssetsFromTargetsWithResolver(target string, resolver dnsResolver) 
 				Authority: info.Host,
 				Service:   "",
 			}
-			assets = append(assets, enrichAssetWithDNS(asset, resolver))
+			asset = enrichAssetWithDNS(asset, resolver)
+			// 域名目标DNS解析失败（无有效IP），跳过该目标
+			if asset == nil {
+				continue
+			}
+			assets = append(assets, asset)
 		}
 	}
 
@@ -230,6 +239,7 @@ func parseSingleTarget(info *utils.TargetInfo) *ParsedTarget {
 }
 
 // buildAssetFromParsed 从 ParsedTarget 构建 Asset
+// 域名DNS解析失败时返回nil
 func buildAssetFromParsed(pt *ParsedTarget, category string, resolver dnsResolver) *Asset {
 	asset := &Asset{
 		Host:     pt.Host,
@@ -251,7 +261,13 @@ func buildAssetFromParsed(pt *ParsedTarget, category string, resolver dnsResolve
 		asset.Path = pt.Path
 	}
 
-	return enrichAssetWithDNS(asset, resolver)
+	asset = enrichAssetWithDNS(asset, resolver)
+	// 域名DNS解析失败，跳过该目标
+	if asset == nil {
+		return nil
+	}
+
+	return asset
 }
 
 func enrichAssetWithDNS(asset *Asset, resolver dnsResolver) *Asset {
@@ -261,7 +277,8 @@ func enrichAssetWithDNS(asset *Asset, resolver dnsResolver) *Asset {
 
 	resolved := resolveSingleDomainAsset(asset.Host, resolver)
 	if resolved == nil {
-		return asset
+		// 域名无法解析到有效IPv4/IPv6地址，返回nil让调用方跳过该目标
+		return nil
 	}
 
 	asset.IPV4 = resolved.IPV4
