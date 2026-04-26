@@ -140,6 +140,9 @@ func ApplyDefaults(config *TaskConfig) {
 	if config.Fingerprint != nil {
 		applyFingerprintDefaults(config.Fingerprint)
 	}
+	if config.BruteScan != nil {
+		applyBruteScanDefaults(config.BruteScan)
+	}
 	if config.PocScan != nil {
 		applyPocScanDefaults(config.PocScan)
 	}
@@ -231,6 +234,24 @@ func applyDirScanDefaults(c *DirScanConfig) {
 	}
 }
 
+func applyBruteScanDefaults(c *BruteScanConfig) {
+	if c.Threads <= 0 {
+		c.Threads = 10
+	}
+	if c.Threads > 100 {
+		c.Threads = 100
+	}
+	if c.Timeout <= 0 {
+		c.Timeout = 5
+	}
+	if c.Timeout > 60 {
+		c.Timeout = 60
+	}
+	if c.DelayMs < 0 {
+		c.DelayMs = 0
+	}
+}
+
 // ==================== 配置验证 ====================
 
 // ValidateTaskConfig 验证任务配置
@@ -268,6 +289,12 @@ func ValidateTaskConfig(config *TaskConfig) error {
 	if config.DirScan != nil && config.DirScan.Enable {
 		v.NonNegative("dirscan.threads", config.DirScan.Threads)
 		v.NonNegative("dirscan.timeout", config.DirScan.Timeout)
+	}
+
+	if config.BruteScan != nil && config.BruteScan.Enable {
+		v.NonNegative("brutescan.threads", config.BruteScan.Threads)
+		v.NonNegative("brutescan.timeout", config.BruteScan.Timeout)
+		v.NonNegative("brutescan.delayMs", config.BruteScan.DelayMs)
 	}
 
 	return v.Error()
