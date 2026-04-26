@@ -41,6 +41,7 @@ type ServiceContext struct {
 	NotifyConfigModel       *model.NotifyConfigModel
 	ScanTemplateModel       *model.ScanTemplateModel
 	CronTaskModel           *model.CronTaskModel
+	WeakpassDictModel       *model.WeakpassDictModel
 
 	// 调度器
 	Scheduler *scheduler.Scheduler
@@ -140,6 +141,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		NotifyConfigModel:       model.NewNotifyConfigModel(mongoDB),
 		ScanTemplateModel:       model.NewScanTemplateModel(mongoDB),
 		CronTaskModel:           model.NewCronTaskModel(mongoDB),
+		WeakpassDictModel:       model.NewWeakpassDictModel(mongoDB),
 		Scheduler:               scheduler.NewScheduler(rdb),
 		ScanResultService:       NewScanResultService(mongoDB),
 		HistoryService:          NewHistoryService(mongoDB),
@@ -163,6 +165,9 @@ func NewServiceContext(c config.Config) *ServiceContext {
 
 	// 设置黑名单模型（用于启动时导入默认黑名单）
 	svcCtx.SyncMethods.SetBlacklistModel(model.NewBlacklistConfigModel(svcCtx.MongoDB))
+
+	// 设置弱口令字典模型（用于启动时导入默认字典）
+	svcCtx.SyncMethods.SetWeakpassDictModel(svcCtx.WeakpassDictModel)
 
 	// 初始化内置扫描模板
 	sync.InitBuiltinTemplates(svcCtx.ScanTemplateModel)

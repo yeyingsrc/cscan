@@ -356,6 +356,7 @@ type SyncMethods struct {
 	subdomainDictModel *model.SubdomainDictModel
 	httpServiceModel   *model.HttpServiceModel
 	blacklistModel     *model.BlacklistConfigModel
+	weakpassDictModel  *model.WeakpassDictModel
 }
 
 func NewSyncMethods(nucleiModel *model.NucleiTemplateModel, fpModel *model.FingerprintModel, pocModel *model.CustomPocModel, afpModel *model.ActiveFingerprintModel, dirscanDictModel *model.DirScanDictModel, subdomainDictModel *model.SubdomainDictModel) *SyncMethods {
@@ -378,6 +379,11 @@ func (s *SyncMethods) SetBlacklistModel(model *model.BlacklistConfigModel) {
 	s.blacklistModel = model
 }
 
+// SetWeakpassDictModel 设置弱口令字典模型（用于启动时导入）
+func (s *SyncMethods) SetWeakpassDictModel(model *model.WeakpassDictModel) {
+	s.weakpassDictModel = model
+}
+
 func (s *SyncMethods) SyncNucleiTemplates() {
 	s.nucleiSync.SyncTemplates(context.Background())
 }
@@ -396,6 +402,8 @@ func (s *SyncMethods) ImportCustomPocAndFingerprints() {
 	s.importHttpServiceMappings(context.Background())
 	// 导入默认黑名单规则
 	s.initBuiltinBlacklist(context.Background())
+	// 导入弱口令字典
+	s.initBuiltinWeakpassDicts(context.Background())
 }
 
 func (s *SyncMethods) RefreshTemplateCache() {
@@ -911,5 +919,43 @@ func (s *SyncMethods) initBuiltinBlacklist(ctx context.Context) {
 		}
 	} else {
 		logx.Infof("[SyncMethods] Builtin blacklist: no new rules to import (%d already exist)", totalSkipped)
+	}
+}
+
+// initBuiltinWeakpassDicts 初始化内置弱口令字典
+// 从 poc/custom-weakpass 目录读取默认字典文件，导入到数据库
+func (s *SyncMethods) initBuiltinWeakpassDicts(ctx context.Context) {
+	if s.weakpassDictModel == nil {
+		logx.Info("[SyncMethods] WeakpassDictModel is nil, skipping builtin weakpass dicts import")
+		return
+	}
+
+	// 确定字典目录路径
+	dictDir := "/app/poc/custom-weakpass"
+	if _, err := os.Stat(dictDir); os.IsNotExist(err) {
+		dictDir = "poc/custom-weakpass"
+	}
+	if _, err := os.Stat(dictDir); os.IsNotExist(err) {
+		// 尝试多个可能的路径
+		possiblePaths := []string{
+			"poc/custom-weakpass/default-weakpass.txt",
+			"../poc/custom-weakpass/default-weakpass.txt",
+			"../../poc/custom-weakpass/default-weakpass.txt",
+		}
+		for _, p := range possiblePaths {
+			if _, err := os.Stat(p); err == nil {
+				dictDir = p
+				break
+			}
+		}
+	}
+
+	logx.Infof("[SyncMethods] Initializing builtin weakpass dicts from: %s", dictDir)
+
+	// 调用模型的初始化方法
+	if err := s.weakpassDictModel.InitBuiltinDicts(ctx); err != nil {
+		logx.Errorf("[SyncMethods] Failed to init builtin weakpass dicts: %v", err)
+	} else {
+		logx.Info("[SyncMethods] Builtin weakpass dicts initialized successfully")
 	}
 }
