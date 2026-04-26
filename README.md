@@ -40,51 +40,6 @@
 
 ## 功能特性
 
-### 扫描引擎
-
-<table width="100%">
-  <tr>
-    <th align="left">扫描阶段</th>
-    <th align="left">说明</th>
-    <th align="left">工具</th>
-  </tr>
-  <tr>
-    <td>子域名扫描</td>
-    <td>子域名枚举与发现</td>
-    <td>Subfinder / Ksubdomain</td>
-  </tr>
-  <tr>
-    <td>端口扫描</td>
-    <td>全端口/指定端口快速扫描</td>
-    <td>Naabu / Masscan</td>
-  </tr>
-  <tr>
-    <td>端口识别</td>
-    <td>服务版本识别</td>
-    <td>Nmap / Fingerprintx</td>
-  </tr>
-  <tr>
-    <td>指纹识别</td>
-    <td>Web 指纹与 Icon Hash 识别</td>
-    <td>HTTPX / 内置引擎</td>
-  </tr>
-  <tr>
-    <td>弱口令扫描</td>
-    <td>多服务弱口令爆破</td>
-    <td>内置引擎</td>
-  </tr>
-  <tr>
-    <td>目录扫描</td>
-    <td>目录与文件枚举</td>
-    <td>FFUF</td>
-  </tr>
-  <tr>
-    <td>漏洞扫描</td>
-    <td>POC 漏洞验证与扫描</td>
-    <td>Nuclei</td>
-  </tr>
-</table>
-
 ### 核心能力
 
 - **分布式架构** - Master/Worker 分离，支持多节点弹性扩缩容
