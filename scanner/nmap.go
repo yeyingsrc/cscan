@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )
@@ -229,7 +231,7 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 	opts.Ports = portsToString(ports)
 
 	// 执行nmap扫描
-	assets := s.runNmapWithLogger(ctx, targets, opts, config.OnProgress, logInfo, logWarn, logError)
+	assets := s.runNmapWithLogger(targets, opts, config.OnProgress, logInfo, logWarn, logError)
 
 	return &ScanResult{
 		WorkspaceId: config.WorkspaceId,
@@ -240,9 +242,11 @@ func (s *NmapScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResult
 
 // runNmapWithLogger 运行nmap（带日志回调）
 // 优化为每个端口一个进程，通过并发控制降低扫描影响
-func (s *NmapScanner) runNmapWithLogger(ctx context.Context, targets []string, opts *NmapOptions, onProgress func(int, string), logInfo, _ logFunc, logError logFunc) []*Asset {
+// 注意：每个端口使用独立的超时context，不会因为一个端口超时影响其他端口
+func (s *NmapScanner) runNmapWithLogger(targets []string, opts *NmapOptions, onProgress func(int, string), logInfo, _ logFunc, logError logFunc) []*Asset {
 	var assets []*Asset
 	var mu sync.Mutex
+	var finishedCount int32
 
 	// 使用 parsePorts 解析端口
 	ports := parsePorts(opts.Ports)
@@ -271,23 +275,19 @@ func (s *NmapScanner) runNmapWithLogger(ctx context.Context, targets []string, o
 		go func() {
 			defer wg.Done()
 			for task := range taskChan {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					// 执行单端口扫描
-					result := s.scanSinglePortWithLogger(ctx, targets, task.port, opts, logInfo, logError)
-					if len(result) > 0 {
-						mu.Lock()
-						assets = append(assets, result...)
-						mu.Unlock()
-					}
+				// 每个端口使用独立的超时context，互不影响
+				result := s.scanSinglePortWithLogger(targets, task.port, opts, logInfo, logError)
+				if len(result) > 0 {
+					mu.Lock()
+					assets = append(assets, result...)
+					mu.Unlock()
+				}
 
-					// 更新进度
-					if onProgress != nil && totalPorts > 0 {
-						progress := (task.index + 1) * 100 / totalPorts
-						onProgress(progress, fmt.Sprintf("Scanning port %d (%d/%d)", task.port, task.index+1, totalPorts))
-					}
+				// 更新进度（原子操作）
+				atomic.AddInt32(&finishedCount, 1)
+				if onProgress != nil && totalPorts > 0 {
+					progress := int(atomic.LoadInt32(&finishedCount)) * 100 / totalPorts
+					onProgress(progress, fmt.Sprintf("Scanning port %d (%d/%d)", task.port, atomic.LoadInt32(&finishedCount), totalPorts))
 				}
 			}
 		}()
@@ -295,13 +295,7 @@ func (s *NmapScanner) runNmapWithLogger(ctx context.Context, targets []string, o
 
 	// 分发任务
 	for i, port := range ports {
-		select {
-		case <-ctx.Done():
-			close(taskChan)
-			wg.Wait()
-			return assets
-		case taskChan <- scanTask{port: port, index: i}:
-		}
+		taskChan <- scanTask{port: port, index: i}
 	}
 
 	close(taskChan)
@@ -312,7 +306,7 @@ func (s *NmapScanner) runNmapWithLogger(ctx context.Context, targets []string, o
 }
 
 // scanSinglePortWithLogger 扫描单个端口（带日志回调）
-func (s *NmapScanner) scanSinglePortWithLogger(ctx context.Context, targets []string, port int, opts *NmapOptions, logInfo, logError logFunc) []*Asset {
+func (s *NmapScanner) scanSinglePortWithLogger(targets []string, port int, opts *NmapOptions, logInfo, logError logFunc) []*Asset {
 	var assets []*Asset
 
 	// 构建nmap命令
@@ -333,7 +327,11 @@ func (s *NmapScanner) scanSinglePortWithLogger(ctx context.Context, targets []st
 	// 输出执行命令到日志
 	logInfo("Nmap: executing nmap -Pn -p %d %s", port, strings.Join(targets, " "))
 
-	cmd := exec.CommandContext(ctx, "nmap", args...)
+	// 为单个端口创建独立的超时context，避免一个端口超时导致所有扫描停止
+	portCtx, portCancel := context.WithTimeout(context.Background(), time.Duration(opts.Timeout)*time.Second)
+	defer portCancel()
+
+	cmd := exec.CommandContext(portCtx, "nmap", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -351,7 +349,7 @@ func (s *NmapScanner) scanSinglePortWithLogger(ctx context.Context, targets []st
 
 	var output []byte
 	select {
-	case <-ctx.Done():
+	case <-portCtx.Done():
 		// 超时，强制终止进程
 		if cmd.Process != nil {
 			cmd.Process.Kill()

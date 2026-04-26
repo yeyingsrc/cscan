@@ -185,6 +185,11 @@ func (r *ScannerRegistry) RegisterBuiltins() {
 	r.Register("fingerprintx", func(cfg *ScannerRegistryConfig) (Scanner, error) {
 		return NewFingerprintxScanner(), nil
 	})
+
+	// 弱口令扫描器
+	r.Register("brutescan", func(cfg *ScannerRegistryConfig) (Scanner, error) {
+		return NewBruteScanScanner(), nil
+	})
 }
 
 // ScannerInfo 扫描器信息
