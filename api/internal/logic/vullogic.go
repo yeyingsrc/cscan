@@ -199,12 +199,30 @@ func (l *VulLogic) VulDelete(req *types.VulDeleteReq, workspaceId string) (resp 
 }
 
 func (l *VulLogic) VulBatchDelete(req *types.VulBatchDeleteReq, workspaceId string) (resp *types.BaseResp, err error) {
-	vulModel := l.svcCtx.GetVulModel(workspaceId)
-	deleted, err := vulModel.BatchDelete(l.ctx, req.Ids)
-	if err != nil {
-		return &types.BaseResp{Code: 500, Msg: "删除失败: " + err.Error()}, nil
+	var totalDeleted int64
+
+	// 如果是全部空间模式，需要遍历所有工作空间删除
+	if workspaceId == "" || workspaceId == "all" {
+		wsIds := common.GetWorkspaceIds(l.ctx, l.svcCtx, "all")
+		for _, wsId := range wsIds {
+			vulModel := l.svcCtx.GetVulModel(wsId)
+			deleted, err := vulModel.BatchDelete(l.ctx, req.Ids)
+			if err != nil {
+				logx.Errorf("[VulBatchDelete] 删除工作空间 %s 漏洞失败: %v", wsId, err)
+				continue
+			}
+			totalDeleted += deleted
+		}
+	} else {
+		vulModel := l.svcCtx.GetVulModel(workspaceId)
+		deleted, err := vulModel.BatchDelete(l.ctx, req.Ids)
+		if err != nil {
+			return &types.BaseResp{Code: 500, Msg: "删除失败: " + err.Error()}, nil
+		}
+		totalDeleted = deleted
 	}
-	return &types.BaseResp{Code: 0, Msg: "成功删除 " + strconv.FormatInt(deleted, 10) + " 条记录"}, nil
+
+	return &types.BaseResp{Code: 0, Msg: "成功删除 " + strconv.FormatInt(totalDeleted, 10) + " 条记录"}, nil
 }
 
 func (l *VulLogic) VulClear(workspaceId string) (resp *types.BaseResp, err error) {
