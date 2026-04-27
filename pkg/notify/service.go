@@ -71,7 +71,8 @@ func BuildNotifyResult(info *TaskCompleteInfo) *NotifyResult {
 
 // SendNotificationAsync 异步发送通知（不阻塞主流程）
 // 支持高危过滤：如果配置了高危过滤且未检测到高危项，则跳过该配置的通知
-func SendNotificationAsync(ctx context.Context, configs []ConfigItem, result *NotifyResult) {
+// 注意：ctx 仅用于传递 trace 等值，不继承其取消信号，确保通知不因请求结束而中断
+func SendNotificationAsync(_ context.Context, configs []ConfigItem, result *NotifyResult) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
