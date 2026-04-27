@@ -10,7 +10,7 @@
 [![Go](https://img.shields.io/badge/Go-1.25.1-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![Vue](https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat-square&logo=vue.js)](https://vuejs.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-3.0-green)](VERSION)
+[![Version](https://img.shields.io/badge/Version-3.1-green)](VERSION)
 
 [中文](README.md) · [English](README_EN.md)
 
@@ -25,19 +25,6 @@
 ---
 
 ## Features
-
-### Scanning Engine
-
-| Scan Phase | Description | Tool |
-|:---|:---|:---|
-| Subdomain Scan | Subdomain enumeration and discovery | Subfinder / Ksubdomain |
-| Port Scan | Full/custom port fast scanning | Naabu / Masscan |
-| Port Identify | Service version identification | Nmap / Fingerprintx |
-| Fingerprint | Web fingerprint & Icon Hash identification | HTTPX / Built-in Engine |
-| Brute Scan | Multi-service brute force (SSH/MySQL/Redis/MongoDB/PostgreSQL/MSSQL/FTP/SNMP/Oracle/SMB/MQTT) | Built-in Engine |
-| Dir Scan | Directory and file enumeration | FFUF |
-| POC Scan | POC vulnerability verification and scanning | Nuclei |
-
 ### Core Capabilities
 
 - **Distributed Architecture** - Master/Worker separation, multi-node elastic scaling
