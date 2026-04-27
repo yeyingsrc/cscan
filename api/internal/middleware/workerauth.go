@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 
@@ -45,9 +46,9 @@ func (m *WorkerAuthMiddleware) Handle(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// 验证Install Key
-		if installKey != storedKey {
+		if subtle.ConstantTimeCompare([]byte(installKey), []byte(storedKey)) != 1 {
 			workerUnauthorized(w, "Worker认证密钥无效")
-			logx.Errorf("[WorkerAuth] Invalid install key attempt: %s from %s", installKey, r.RemoteAddr)
+			logx.Errorf("[WorkerAuth] Invalid install key attempt from %s", r.RemoteAddr)
 			return
 		}
 
