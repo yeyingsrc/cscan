@@ -521,7 +521,10 @@ func (p *WebhookProvider) Send(ctx context.Context, result *NotifyResult) error 
 				"reportUrl":  result.ReportURL,
 				"message":    FormatMessage(result, p.config.MessageTemplate),
 			}
-			data, _ := json.Marshal(payload)
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return fmt.Errorf("marshal webhook payload: %w", err)
+			}
 			body = bytes.NewReader(data)
 		}
 	}
