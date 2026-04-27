@@ -69,6 +69,13 @@ func (n *Notifier) ClearProviders() {
 	n.providers = make([]Provider, 0)
 }
 
+// ProviderCount 返回已加载的提供者数量
+func (n *Notifier) ProviderCount() int {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return len(n.providers)
+}
+
 // Send 发送通知到所有提供者
 func (n *Notifier) Send(ctx context.Context, result *NotifyResult) error {
 	n.mu.RLock()
