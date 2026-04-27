@@ -170,30 +170,34 @@ func (m *TaskRecoveryManager) recoverTask(taskId string, execInfo *TaskExecution
 		return
 	}
 
-	// 从处理中集合移除
-	m.rdb.SRem(m.ctx, m.processingKey, taskId)
-
-	// 重新放回队列
-	score := float64(time.Now().Unix())
-	taskData, _ := json.Marshal(taskInfo)
+	taskData, err := json.Marshal(taskInfo)
+	if err != nil {
+		m.logger.Errorf("Failed to marshal task %s: %v", taskId, err)
+		m.markTaskFailed(taskId, fmt.Sprintf("Failed to marshal task: %v", err))
+		return
+	}
 
 	// 根据任务类型选择队列
 	var queueKey string
 	if len(taskInfo.Workers) > 0 {
-		// 如果指定了 Worker，放回专属队列
 		queueKey = fmt.Sprintf("cscan:task:queue:worker:%s", taskInfo.Workers[0])
 	} else {
-		// 否则放回公共队列
 		queueKey = m.queueKey
 	}
 
-	err = m.rdb.ZAdd(m.ctx, queueKey, redis.Z{
-		Score:  score,
-		Member: taskData,
-	}).Err()
+	score := float64(time.Now().Unix())
+
+	// Lua 脚本：原子化 SREM + ZADD，防止崩溃时任务丢失或重复
+	script := redis.NewScript(`
+		redis.call('SREM', KEYS[1], ARGV[1])
+		redis.call('ZADD', KEYS[2], ARGV[2], ARGV[3])
+		return 1
+	`)
+	err = script.Run(m.ctx, m.rdb, []string{m.processingKey, queueKey},
+		taskId, score, string(taskData)).Err()
 
 	if err != nil {
-		m.logger.Errorf("Failed to requeue task %s: %v", taskId, err)
+		m.logger.Errorf("Failed to atomically requeue task %s: %v", taskId, err)
 		return
 	}
 
@@ -306,7 +310,9 @@ func (m *TaskRecoveryManager) isWorkerOnline(workerName string) bool {
 // markTaskFailed 标记任务失败
 func (m *TaskRecoveryManager) markTaskFailed(taskId, reason string) {
 	// 从处理中集合移除
-	m.rdb.SRem(m.ctx, m.processingKey, taskId)
+	if err := m.rdb.SRem(m.ctx, m.processingKey, taskId).Err(); err != nil {
+		m.logger.Errorf("Failed to remove task %s from processing set: %v", taskId, err)
+	}
 
 	// 更新任务状态
 	statusKey := fmt.Sprintf("cscan:task:status:%s", taskId)
@@ -315,8 +321,14 @@ func (m *TaskRecoveryManager) markTaskFailed(taskId, reason string) {
 		"state":  "FAILURE",
 		"result": reason,
 	}
-	statusJson, _ := json.Marshal(statusData)
-	m.rdb.Set(m.ctx, statusKey, statusJson, 24*time.Hour)
+	statusJson, err := json.Marshal(statusData)
+	if err != nil {
+		m.logger.Errorf("Failed to marshal status for task %s: %v", taskId, err)
+		return
+	}
+	if err := m.rdb.Set(m.ctx, statusKey, statusJson, 24*time.Hour).Err(); err != nil {
+		m.logger.Errorf("Failed to set status for task %s: %v", taskId, err)
+	}
 
 	// 移除执行信息
 	m.RemoveTaskExecution(taskId)
