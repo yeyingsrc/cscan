@@ -172,6 +172,12 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	// 初始化内置扫描模板
 	sync.InitBuiltinTemplates(svcCtx.ScanTemplateModel)
 
+	// 初始化 JSFinder 全局配置（不存在则写入内置默认值）
+	sync.InitJSFinderConfig(model.NewJSFinderConfigModel(svcCtx.MongoDB))
+
+	// 为已存在的内置模板补全 jsfinder 字段（标准扫描默认开启）
+	sync.MigrateBuiltinTemplatesAddJSFinder(svcCtx.ScanTemplateModel)
+
 	return svcCtx
 }
 
@@ -244,4 +250,8 @@ func (s *ServiceContext) SyncWappalyzerFingerprints() {
 // ImportCustomPocAndFingerprints 导入自定义POC和指纹
 func (s *ServiceContext) ImportCustomPocAndFingerprints() {
 	s.SyncMethods.ImportCustomPocAndFingerprints()
+}
+
+func (s *ServiceContext) GetJSFinderResultModel(workspaceId string) *model.JSFinderResultModel {
+	return model.NewJSFinderResultModel(s.MongoDB, workspaceId)
 }
