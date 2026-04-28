@@ -245,6 +245,14 @@ func (s *FingerprintScanner) Scan(ctx context.Context, config *ScanConfig) (*Sca
 		}
 	}
 
+	// 确保所有已扫描的 HTTP 资产 IsHTTP 标记正确
+	// 修复：httpx 等工具可能未正确设置 IsHTTP，导致下游模块（JSFinder/DirScan）跳过该资产
+	for _, asset := range httpAssets {
+		if asset.HttpStatus != "" || asset.Title != "" || asset.Service == "http" || asset.Service == "https" {
+			asset.IsHTTP = true
+		}
+	}
+
 	// 添加非HTTP资产到结果中（不进行指纹识别）
 	for _, asset := range config.Assets {
 		if !isHttpAsset(asset) {
@@ -387,8 +395,18 @@ func checkByCommonPorts(asset *Asset) (bool, bool) {
 
 func checkByEmptyService(asset *Asset) (bool, bool) {
 	if strings.ToLower(asset.Service) == "" {
-		return true, true // 让fingerprint函数去实际探测
+		return true, true // 空服务名，让fingerprint函数去实际探测
 	}
+
+	// 如果全局检查器存在，检查服务名是否在配置中
+	// 对于不在配置中的未知服务（如cbt），也尝试HTTP探测
+	if globalHttpServiceChecker != nil {
+		if _, found := globalHttpServiceChecker.IsHttpService(strings.ToLower(asset.Service)); !found {
+			// 服务名不在配置中，尝试HTTP探测
+			return true, true
+		}
+	}
+
 	return false, false
 }
 
