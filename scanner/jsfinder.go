@@ -947,11 +947,6 @@ func jsFinderRiskTag(f *jsFinderFinding) string {
 func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsFinderFinding, unauths []*jsFinderUnauthResult) []*JSFinderResult {
 	out := make([]*JSFinderResult, 0, len(jsURLs)+len(findings)+len(unauths)+2)
 
-	apiPaths := make([]string, 0, 32)
-	absURLs := make([]string, 0, 32)
-	seenP := make(map[string]struct{}, 32)
-	seenA := make(map[string]struct{}, 32)
-
 	// 收集有安全风险的 JS 文件源
 	riskJSSources := make(map[string][]string) // sourceJS -> finding types
 
@@ -967,17 +962,11 @@ func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsF
 
 		switch f.Type {
 		case "url":
-			if _, ok := seenP[f.Value]; !ok {
-				seenP[f.Value] = struct{}{}
-				apiPaths = append(apiPaths, f.Value)
-			}
-			continue
+			f.Severity = "info"
+			f.VulName = "JS 提取 API 路径"
 		case "absurl":
-			if _, ok := seenA[f.Value]; !ok {
-				seenA[f.Value] = struct{}{}
-				absURLs = append(absURLs, f.Value)
-			}
-			continue
+			f.Severity = "info"
+			f.VulName = "JS 提取绝对 URL"
 		}
 		if f.Severity == "" || f.VulName == "" {
 			continue
@@ -991,48 +980,30 @@ func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsF
 
 		ruleName := jsFinderTypeToRuleName(f.Type)
 
+		// url/absurl 类型：URL 字段显示提取到的路径/URL，来源信息放入 Result
+		// 其他类型：URL 字段显示来源 JS 文件，Result 显示提取到的值
+		urlField := f.Source
+		resultField := f.Value
+		curlTarget := f.Source
+		if f.Type == "url" || f.Type == "absurl" {
+			urlField = f.Value
+			resultField = fmt.Sprintf("Source: %s", f.Source)
+			curlTarget = f.Value
+		}
+
 		out = append(out, &JSFinderResult{
 			Authority:       t.Authority,
 			Host:             t.Host,
 			Port:             t.Port,
-				URL:              f.Source,
+			URL:              urlField,
 			Severity:         f.Severity,
 			VulName:          f.VulName,
-			Result:           f.Value,
+			Result:           resultField,
 			Tags:             tags,
 			MatcherName:      ruleName,
 			ExtractedResults: []string{f.Value},
-			CurlCommand:      fmt.Sprintf("curl -sS '%s'", f.Source),
+			CurlCommand:      fmt.Sprintf("curl -sS '%s'", curlTarget),
 			Response:         fmt.Sprintf("[%s] %s\nSource: %s", f.Type, f.Value, f.Source),
-		})
-	}
-
-	if len(apiPaths) > 0 {
-		out = append(out, &JSFinderResult{
-			Authority:       t.Authority,
-			Host:             t.Host,
-			Port:             t.Port,
-				URL:              t.BaseURL,
-			Severity:         "info",
-			VulName:          "JS 提取 API 路径清单",
-			Result:           strings.Join(apiPaths, "\n"),
-			Tags:             []string{"jsfinder", "url-list"},
-			MatcherName:      "JS Relative Path Regex",
-			ExtractedResults: apiPaths,
-		})
-	}
-	if len(absURLs) > 0 {
-		out = append(out, &JSFinderResult{
-			Authority:       t.Authority,
-			Host:             t.Host,
-			Port:             t.Port,
-				URL:              t.BaseURL,
-			Severity:         "info",
-			VulName:          "JS 提取绝对 URL 清单",
-			Result:           strings.Join(absURLs, "\n"),
-			Tags:             []string{"jsfinder", "absurl-list"},
-			MatcherName:      "JS Absolute URL Regex",
-			ExtractedResults: absURLs,
 		})
 	}
 

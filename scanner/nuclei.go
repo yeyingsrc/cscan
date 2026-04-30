@@ -164,6 +164,17 @@ func (s *NucleiScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResu
 		}
 	}
 
+	// 当调用方未指定并发/速率时，使用自适应调度器的推荐值
+	if opts.Concurrency <= 0 {
+		opts.Concurrency = adaptive.NucleiConcurrency
+	}
+	if opts.RateLimit <= 0 {
+		opts.RateLimit = adaptive.NucleiRateLimit
+	}
+	if opts.Retries <= 0 {
+		opts.Retries = adaptive.NucleiRetries
+	}
+
 	// Safety cap for template concurrency
 	if opts.Concurrency > 50 {
 		opts.Concurrency = 50
