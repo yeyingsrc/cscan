@@ -5,7 +5,7 @@ ARG VERSION
 WORKDIR /app
 
 # 安装编译依赖
-RUN apk add --no-cache git curl
+RUN apk add --no-cache git curl libpcap-dev gcc musl-dev
 
 # 复制依赖文件并下载
 COPY go.mod go.sum ./
@@ -24,8 +24,8 @@ RUN mkdir -p /app/data && \
 RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${VERSION}" \
     -o /cscan-worker ./cmd/worker/main.go
 
-# 安装 ksubdomain
-RUN go install -v github.com/boy-hack/ksubdomain/v2/cmd/ksubdomain@latest
+# 安装 ksubdomain（需要 CGO 支持 libpcap）
+RUN CGO_ENABLED=1 go install -v github.com/boy-hack/ksubdomain/v2/cmd/ksubdomain@latest
 
 # ============ 运行阶段 ============
 FROM alpine:3.19
@@ -41,7 +41,8 @@ RUN apk add --no-cache \
     bind-tools \
     chromium \
     font-noto-cjk \
-    util-linux
+    util-linux \
+    libpcap
 
 # 设置时区
 ENV TZ=Asia/Shanghai
