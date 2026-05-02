@@ -17,7 +17,7 @@ import (
 // MongoDBPlugin MongoDB爆破插件
 type MongoDBPlugin struct{}
 
-func (p *MongoDBPlugin) Name() string   { return "mongodb" }
+func (p *MongoDBPlugin) Name() string     { return "mongodb" }
 func (p *MongoDBPlugin) DefaultPort() int { return 27017 }
 
 func (p *MongoDBPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -62,7 +62,7 @@ func (p *MongoDBPlugin) Brute(ctx context.Context, host string, port int, userna
 
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "mongodb", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "mongodb", Success: false, Message: "canceled"}
 			default:
 			}
 

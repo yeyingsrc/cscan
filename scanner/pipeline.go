@@ -96,7 +96,7 @@ func (p *Pipeline) Execute(ctx context.Context, input *StageInput) (*ScanResult,
 		// 检查上下文取消
 		select {
 		case <-ctx.Done():
-			p.log("info", "Pipeline %s cancelled", p.name)
+			p.log("info", "Pipeline %s canceled", p.name)
 			return result, ctx.Err()
 		default:
 		}

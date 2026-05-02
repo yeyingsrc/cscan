@@ -14,7 +14,7 @@ import (
 // SMBPlugin SMB爆破插件
 type SMBPlugin struct{}
 
-func (p *SMBPlugin) Name() string   { return "smb" }
+func (p *SMBPlugin) Name() string     { return "smb" }
 func (p *SMBPlugin) DefaultPort() int { return 445 }
 
 func (p *SMBPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -31,7 +31,7 @@ func (p *SMBPlugin) Brute(ctx context.Context, host string, port int, usernames,
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "smb", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "smb", Success: false, Message: "canceled"}
 			default:
 			}
 

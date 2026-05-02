@@ -62,12 +62,12 @@ func GetTypedOptions[T ScannerOptions](config *ScanConfig) (T, bool) {
 
 // ScanResult 扫描结果
 type ScanResult struct {
-	WorkspaceId     string           `json:"workspaceId"`
-	MainTaskId      string           `json:"mainTaskId"`
-	Assets          []*Asset         `json:"assets"`
-	Vulnerabilities []*Vulnerability `json:"vulnerabilities"`
+	WorkspaceId     string            `json:"workspaceId"`
+	MainTaskId      string            `json:"mainTaskId"`
+	Assets          []*Asset          `json:"assets"`
+	Vulnerabilities []*Vulnerability  `json:"vulnerabilities"`
 	JSFinderResults []*JSFinderResult `json:"jsfinderResults,omitempty"`
-	SkippedHosts    []string         `json:"skippedHosts,omitempty"` // 因端口阈值超限被跳过的主机列表
+	SkippedHosts    []string          `json:"skippedHosts,omitempty"` // 因端口阈值超限被跳过的主机列表
 }
 
 // Asset 资产

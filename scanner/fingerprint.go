@@ -176,16 +176,14 @@ func (s *FingerprintScanner) Scan(ctx context.Context, config *ScanConfig) (*Sca
 		Assets:      make([]*Asset, 0),
 	}
 
-	// 过滤出HTTP/HTTPS相关的资产
-	httpAssets := filterHttpAssets(config.Assets)
+	// 使用传入的资产（worker层已过滤HTTP资产）
+	httpAssets := config.Assets
 	if len(httpAssets) == 0 {
-		taskLog("INFO", "Fingerprint: no HTTP/HTTPS assets found, skipping")
-		// 返回所有原始资产，但不进行指纹识别
-		result.Assets = config.Assets
+		taskLog("INFO", "Fingerprint: no assets to scan, skipping")
 		return result, nil
 	}
 
-	taskLog("INFO", "Fingerprint: scanning %d HTTP assets, tool=%s, timeout %ds/target", len(httpAssets), opts.Tool, opts.TargetTimeout)
+	taskLog("INFO", "Fingerprint: scanning %d assets, tool=%s, timeout %ds/target", len(httpAssets), opts.Tool, opts.TargetTimeout)
 
 	// 根据选择的工具执行扫描
 	useHttpx := opts.Tool == "httpx"
@@ -212,12 +210,6 @@ func (s *FingerprintScanner) Scan(ctx context.Context, config *ScanConfig) (*Sca
 					taskLog("DEBUG", "Preserving httpx result for %s:%d (title=%s, apps=%d)", remainAsset.Host, remainAsset.Port, remainAsset.Title, len(remainAsset.App))
 				}
 				result.Assets = append(result.Assets, remainAsset)
-			}
-			// 同样补充非HTTP资产
-			for _, asset := range config.Assets {
-				if !isHttpAsset(asset) {
-					result.Assets = append(result.Assets, asset)
-				}
 			}
 			taskLog("INFO", "Fingerprint: total %d assets preserved after timeout", len(result.Assets))
 			return result, nil
@@ -254,13 +246,6 @@ func (s *FingerprintScanner) Scan(ctx context.Context, config *ScanConfig) (*Sca
 		}
 	}
 
-	// 添加非HTTP资产到结果中（不进行指纹识别）
-	for _, asset := range config.Assets {
-		if !isHttpAsset(asset) {
-			result.Assets = append(result.Assets, asset)
-		}
-	}
-
 	taskLog("INFO", "Fingerprint: completed passive scan, scanned %d assets", len(httpAssets))
 
 	// 执行主动指纹扫描（如果启用）
@@ -281,17 +266,6 @@ func (s *FingerprintScanner) Scan(ctx context.Context, config *ScanConfig) (*Sca
 	}
 
 	return result, nil
-}
-
-// filterHttpAssets 过滤出HTTP/HTTPS相关的资产
-func filterHttpAssets(assets []*Asset) []*Asset {
-	httpAssets := make([]*Asset, 0)
-	for _, asset := range assets {
-		if isHttpAsset(asset) {
-			httpAssets = append(httpAssets, asset)
-		}
-	}
-	return httpAssets
 }
 
 // httpServiceConfig HTTP服务检测配置 - 消除特殊情况处理
@@ -320,9 +294,9 @@ var (
 	}
 )
 
-// isHttpAsset 判断资产是否为HTTP/HTTPS服务
+// IsHttpAsset 判断资产是否为HTTP/HTTPS服务
 // 重构：使用策略链模式消除多层if/else
-func isHttpAsset(asset *Asset) bool {
+func IsHttpAsset(asset *Asset) bool {
 	// 策略链：按优先级依次检查
 	checks := []func(*Asset) (isHttp bool, decided bool){
 		checkByIsHTTPFlag,

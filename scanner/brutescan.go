@@ -244,12 +244,12 @@ func (s *BruteScanScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanR
 						logHelper(taskLogger, "INFO", "[BruteScan] [%s] Found weak password on %s:%d - %s/%s (stopping all services for this host)", service, asset.Host, asset.Port, result.Username, result.Password)
 					}
 
-				// 构建漏洞URL: service://username:password@host:port
-				// Oracle 特殊处理：附加匹配到的服务名，如 oracle://user:pass@host:port(xe)
-				vulnUrl := fmt.Sprintf("%s://%s:%s@%s:%d", service, result.Username, result.Password, asset.Host, asset.Port)
-				if service == "oracle" && result.ExtraInfo != "" {
-					vulnUrl = fmt.Sprintf("%s://%s:%s@%s:%d(%s)", service, result.Username, result.Password, asset.Host, asset.Port, result.ExtraInfo)
-				}
+					// 构建漏洞URL: service://username:password@host:port
+					// Oracle 特殊处理：附加匹配到的服务名，如 oracle://user:pass@host:port(xe)
+					vulnUrl := fmt.Sprintf("%s://%s:%s@%s:%d", service, result.Username, result.Password, asset.Host, asset.Port)
+					if service == "oracle" && result.ExtraInfo != "" {
+						vulnUrl = fmt.Sprintf("%s://%s:%s@%s:%d(%s)", service, result.Username, result.Password, asset.Host, asset.Port, result.ExtraInfo)
+					}
 
 					vuln := &Vulnerability{
 						Authority: fmt.Sprintf("%s:%d", asset.Host, asset.Port),
@@ -406,7 +406,7 @@ nextUsername:
 
 			select {
 			case <-ctx.Done():
-				return &brute.BruteResult{Host: host, Port: port, Service: service, Success: false, Message: "cancelled"}
+				return &brute.BruteResult{Host: host, Port: port, Service: service, Success: false, Message: "canceled"}
 			case <-bruteCtx.Done():
 				// StopOnFirst: 已被取消（找到弱口令）
 				return finalResult
@@ -523,13 +523,13 @@ func (s *BruteScanScanner) bruteWithPairs(ctx context.Context, plugin brute.Brut
 
 		select {
 		case <-ctx.Done():
-			return &brute.BruteResult{Host: host, Port: port, Service: service, Success: false, Message: "cancelled"}
+			return &brute.BruteResult{Host: host, Port: port, Service: service, Success: false, Message: "canceled"}
 		case <-bruteCtx.Done():
 			// 已被取消（找到弱口令）
 			if finalResult != nil {
 				return finalResult
 			}
-			return &brute.BruteResult{Host: host, Port: port, Service: service, Success: false, Message: "cancelled"}
+			return &brute.BruteResult{Host: host, Port: port, Service: service, Success: false, Message: "canceled"}
 		case sem <- struct{}{}:
 			// 获取到信号量，继续执行
 		}

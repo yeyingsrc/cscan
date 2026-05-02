@@ -10,10 +10,11 @@ import (
 	"regexp"
 	"strings"
 
-	"cscan/model"
 	"github.com/zeromicro/go-zero/core/logx"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
+
+	"cscan/model"
 )
 
 // CustomFingerprintEngine 自定义指纹识别引擎

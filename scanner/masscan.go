@@ -290,7 +290,7 @@ func (s *MasscanScanner) runMasscan(ctx context.Context, targets []string, opts 
 
 	if err := cmd.Wait(); err != nil {
 		if ctx.Err() != nil {
-			logx.Infof("Masscan cancelled for targets")
+			logx.Infof("Masscan canceled for targets")
 		} else {
 			logx.Errorf("Masscan command failed: %v", err)
 		}

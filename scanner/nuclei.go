@@ -324,7 +324,7 @@ func (s *NucleiScanner) executeNucleiScan(ctx, engineCtx context.Context, ne *nu
 	go func() {
 		select {
 		case <-ctx.Done():
-			logx.Infof("Nuclei: parent context cancelled for %s", target)
+			logx.Infof("Nuclei: parent context canceled for %s", target)
 			if taskLogger != nil {
 				taskLogger("WARN", "POC scan interrupted: %v", ctx.Err())
 			}
@@ -379,7 +379,7 @@ func (s *NucleiScanner) handleScanResult(err error, engineCtx context.Context, t
 		}, taskLogger)
 	} else if engineCtx.Err() == context.Canceled {
 		if taskLogger != nil {
-			taskLogger("WARN", "POC scan cancelled")
+			taskLogger("WARN", "POC scan canceled")
 		}
 	}
 
@@ -521,7 +521,7 @@ func (s *NucleiScanner) ScanBatch(ctx context.Context, targets []string, opts *N
 	go func() {
 		select {
 		case <-ctx.Done():
-			logx.Infof("Nuclei batch scan: parent context cancelled")
+			logx.Infof("Nuclei batch scan: parent context canceled")
 			taskLog("WARN", "Scan interrupted")
 			engineCancel()
 		case <-done:
@@ -599,7 +599,7 @@ func (s *NucleiScanner) ScanBatch(ctx context.Context, targets []string, opts *N
 		if engineCtx.Err() == context.DeadlineExceeded {
 			taskLog("WARN", "Scan timeout after %.0fs (scan: %.0fs)", elapsed, scanElapsed)
 		} else if engineCtx.Err() == context.Canceled {
-			taskLog("WARN", "Scan cancelled after %.0fs (scan: %.0fs)", elapsed, scanElapsed)
+			taskLog("WARN", "Scan canceled after %.0fs (scan: %.0fs)", elapsed, scanElapsed)
 		} else {
 			taskLog("ERROR", "Scan error: %v", err)
 		}

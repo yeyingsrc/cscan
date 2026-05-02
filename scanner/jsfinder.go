@@ -774,14 +774,14 @@ func runUnauthChecks(ctx context.Context, client *http.Client, urls []string, op
 					}
 					respRaw := fmt.Sprintf("HTTP/1.1 %d\r\nContent-Length: %d\r\n\r\n%s", status, len(body), respBody)
 
-				if matched := firstKeywordMatch(low, opts.SensitiveKeywords); matched != "" {
-					snippet := extractSnippet(string(body), matched, 80)
-					mu.Lock()
-					results = append(results, &jsFinderUnauthResult{
-						URL: u, Status: status, Reason: "sensitive_leak",
-						Snippet: snippet, MatchedKeyword: matched, VulName: "JS API 未授权敏感信息泄漏", Severity: "high",
-						RequestRaw: reqRaw, ResponseRaw: respRaw,
-					})
+					if matched := firstKeywordMatch(low, opts.SensitiveKeywords); matched != "" {
+						snippet := extractSnippet(string(body), matched, 80)
+						mu.Lock()
+						results = append(results, &jsFinderUnauthResult{
+							URL: u, Status: status, Reason: "sensitive_leak",
+							Snippet: snippet, MatchedKeyword: matched, VulName: "JS API 未授权敏感信息泄漏", Severity: "high",
+							RequestRaw: reqRaw, ResponseRaw: respRaw,
+						})
 						mu.Unlock()
 						logInfo("[JSFinder] [+] %s 命中敏感关键词 [%s]", u, matched)
 						continue
@@ -992,7 +992,7 @@ func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsF
 		}
 
 		out = append(out, &JSFinderResult{
-			Authority:       t.Authority,
+			Authority:        t.Authority,
 			Host:             t.Host,
 			Port:             t.Port,
 			URL:              urlField,
@@ -1070,7 +1070,7 @@ func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsF
 			}
 
 			out = append(out, &JSFinderResult{
-				Authority:       t.Authority,
+				Authority:        t.Authority,
 				Host:             t.Host,
 				Port:             t.Port,
 				URL:              jsURL,
@@ -1086,15 +1086,15 @@ func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsF
 		} else {
 			// 无敏感发现的 JS 文件 - 生成 JS 文件发现记录
 			out = append(out, &JSFinderResult{
-				Authority:  t.Authority,
-				Host:       t.Host,
-				Port:       t.Port,
-				URL:        jsURL,
-				Severity:   "info",
-				VulName:    "JS 文件发现",
-				Result:     jsURL,
-				Tags:       []string{"jsfinder", "js-file"},
-				MatcherName: "JS Script Src Extractor",
+				Authority:        t.Authority,
+				Host:             t.Host,
+				Port:             t.Port,
+				URL:              jsURL,
+				Severity:         "info",
+				VulName:          "JS 文件发现",
+				Result:           jsURL,
+				Tags:             []string{"jsfinder", "js-file"},
+				MatcherName:      "JS Script Src Extractor",
 				ExtractedResults: []string{jsURL},
 				CurlCommand:      fmt.Sprintf("curl -sS '%s'", jsURL),
 				Response:         fmt.Sprintf("JS File: %s\nStatus: clean (no sensitive findings)", jsURL),
@@ -1132,10 +1132,10 @@ func buildJSFinderResults(t *jsFinderTargetCtx, jsURLs []string, findings []*jsF
 		}
 
 		out = append(out, &JSFinderResult{
-			Authority:       t.Authority,
+			Authority:        t.Authority,
 			Host:             t.Host,
 			Port:             t.Port,
-				URL:              u.URL,
+			URL:              u.URL,
 			Severity:         u.Severity,
 			VulName:          u.VulName,
 			Result:           u.URL,

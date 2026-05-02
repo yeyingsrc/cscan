@@ -3,8 +3,9 @@ package scanner
 import (
 	"testing"
 
-	"cscan/model"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"cscan/model"
 )
 
 func TestExtractQuotedValueKeepsInnerDoubleQuotes(t *testing.T) {

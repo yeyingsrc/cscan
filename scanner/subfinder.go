@@ -118,7 +118,7 @@ func (s *SubfinderScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanR
 		for _, domain := range parseResult.RootDomains {
 			select {
 			case <-ctx.Done():
-				logx.Info("Subfinder scan cancelled by context")
+				logx.Info("Subfinder scan canceled by context")
 				return result, ctx.Err()
 			default:
 			}
@@ -253,7 +253,7 @@ func (s *SubfinderScanner) enumerateDomain(ctx context.Context, domain string, o
 			} else {
 				tempConfigFile = tmpFile.Name()
 				defer os.Remove(tempConfigFile)
-				
+
 				if _, err := tmpFile.Write([]byte(configContent)); err != nil {
 					logx.Errorf("Failed to write config content: %v", err)
 				}
@@ -507,7 +507,7 @@ func BuildProviderConfig(configs map[string][]string) string {
 		"alienvault", "bevigil", "bufferover", "builtwith", "c99",
 		"censys", "certspotter", "chaos", "chinaz", "digitalyama",
 		"dnsdb", "dnsdumpster", "dnsrepo", "domainsproject", "driftnet",
-		"facebook", "fofa", "fullhunt", "github", "hackertarget",
+		"fofa", "fullhunt", "github", "hackertarget",
 		"intelx", "leakix", "merklemap", "netlas", "onyphe",
 		"profundis", "pugrecon", "quake", "reconeer", "redhuntlabs",
 		"robtex", "rsecloud", "securitytrails", "shodan", "threatbook",

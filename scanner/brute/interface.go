@@ -111,8 +111,8 @@ func NormalizeServiceName(service string) string {
 	case "redis":
 		return "redis"
 
-	// MQTT - nmap: mqtt; mosquitto 是常见 broker 的 product 名
-	case "mqtt", "mosquitto":
+	// MQTT - nmap: mqtt; mosquito 是常见 broker 的 product 名
+	case "mqtt", "mosquito":
 		return "mqtt"
 
 	default:

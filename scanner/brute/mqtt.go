@@ -10,7 +10,7 @@ import (
 // MQTTPlugin MQTT爆破插件
 type MQTTPlugin struct{}
 
-func (p *MQTTPlugin) Name() string   { return "mqtt" }
+func (p *MQTTPlugin) Name() string     { return "mqtt" }
 func (p *MQTTPlugin) DefaultPort() int { return 1883 }
 
 func (p *MQTTPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -27,7 +27,7 @@ func (p *MQTTPlugin) Brute(ctx context.Context, host string, port int, usernames
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "mqtt", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "mqtt", Success: false, Message: "canceled"}
 			default:
 			}
 

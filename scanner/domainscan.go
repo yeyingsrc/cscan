@@ -2,11 +2,12 @@ package scanner
 
 import (
 	"context"
-	"cscan/pkg/geolocation"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
+
+	"cscan/pkg/geolocation"
 )
 
 // DomainScanner 域名扫描器

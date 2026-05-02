@@ -14,7 +14,7 @@ import (
 // MSSQLPlugin MSSQL爆破插件
 type MSSQLPlugin struct{}
 
-func (p *MSSQLPlugin) Name() string   { return "mssql" }
+func (p *MSSQLPlugin) Name() string     { return "mssql" }
 func (p *MSSQLPlugin) DefaultPort() int { return 1433 }
 
 func (p *MSSQLPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -31,7 +31,7 @@ func (p *MSSQLPlugin) Brute(ctx context.Context, host string, port int, username
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "mssql", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "mssql", Success: false, Message: "canceled"}
 			default:
 			}
 

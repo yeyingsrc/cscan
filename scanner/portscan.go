@@ -2,13 +2,14 @@ package scanner
 
 import (
 	"context"
-	"cscan/pkg/geolocation"
-	"cscan/pkg/utils"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"cscan/pkg/geolocation"
+	"cscan/pkg/utils"
 )
 
 // PortScanner 端口扫描器

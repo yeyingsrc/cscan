@@ -14,7 +14,7 @@ import (
 // FTPPlugin FTP爆破插件
 type FTPPlugin struct{}
 
-func (p *FTPPlugin) Name() string   { return "ftp" }
+func (p *FTPPlugin) Name() string     { return "ftp" }
 func (p *FTPPlugin) DefaultPort() int { return 21 }
 
 func (p *FTPPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -31,7 +31,7 @@ func (p *FTPPlugin) Brute(ctx context.Context, host string, port int, usernames,
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "ftp", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "ftp", Success: false, Message: "canceled"}
 			default:
 			}
 

@@ -2,8 +2,6 @@ package scanner
 
 import (
 	"bytes"
-	"cscan/pkg/geolocation"
-	"cscan/pkg/utils"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -13,6 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"cscan/pkg/geolocation"
+	"cscan/pkg/utils"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )

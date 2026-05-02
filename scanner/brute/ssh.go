@@ -12,7 +12,7 @@ import (
 // SSHPlugin SSH爆破插件
 type SSHPlugin struct{}
 
-func (p *SSHPlugin) Name() string   { return "ssh" }
+func (p *SSHPlugin) Name() string     { return "ssh" }
 func (p *SSHPlugin) DefaultPort() int { return 22 }
 
 func (p *SSHPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -29,7 +29,7 @@ func (p *SSHPlugin) Brute(ctx context.Context, host string, port int, usernames,
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "ssh", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "ssh", Success: false, Message: "canceled"}
 			default:
 			}
 

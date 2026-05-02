@@ -37,7 +37,7 @@ func (p *OraclePlugin) Brute(ctx context.Context, host string, port int, usernam
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "oracle", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "oracle", Success: false, Message: "canceled"}
 			default:
 			}
 

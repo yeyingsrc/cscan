@@ -2,8 +2,6 @@ package scanner
 
 import (
 	"context"
-	"cscan/pkg/geolocation"
-	"cscan/pkg/utils"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"cscan/pkg/geolocation"
+	"cscan/pkg/utils"
 
 	"github.com/projectdiscovery/goflags"
 	"github.com/projectdiscovery/naabu/v2/pkg/result"
@@ -297,7 +298,7 @@ func (s *NaabuScanner) runNaabuWithLogger(ctx context.Context, targets []string,
 		// 检查父context是否已取消（任务被停止）
 		select {
 		case <-ctx.Done():
-			logInfo("Naabu: cancelled at %d/%d targets", i, totalTargets)
+			logInfo("Naabu: canceled at %d/%d targets", i, totalTargets)
 			return allAssets, anyThresholdExceeded
 		default:
 		}

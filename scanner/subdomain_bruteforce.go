@@ -197,7 +197,7 @@ func (s *SubdomainBruteforceScanner) Scan(ctx context.Context, config *ScanConfi
 	for _, domain := range domains {
 		select {
 		case <-ctx.Done():
-			taskLog("INFO", "Bruteforce: cancelled by context")
+			taskLog("INFO", "Bruteforce: canceled by context")
 			return result, ctx.Err()
 		default:
 		}

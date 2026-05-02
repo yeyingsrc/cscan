@@ -16,7 +16,7 @@ import (
 // RedisPlugin Redis爆破插件
 type RedisPlugin struct{}
 
-func (p *RedisPlugin) Name() string   { return "redis" }
+func (p *RedisPlugin) Name() string     { return "redis" }
 func (p *RedisPlugin) DefaultPort() int { return 6379 }
 
 func (p *RedisPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -56,7 +56,7 @@ func (p *RedisPlugin) Brute(ctx context.Context, host string, port int, username
 
 		select {
 		case <-ctx.Done():
-			return &BruteResult{Host: host, Port: port, Service: "redis", Success: false, Message: "cancelled"}
+			return &BruteResult{Host: host, Port: port, Service: "redis", Success: false, Message: "canceled"}
 		default:
 		}
 

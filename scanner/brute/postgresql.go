@@ -14,7 +14,7 @@ import (
 // PostgreSQLPlugin PostgreSQL爆破插件
 type PostgreSQLPlugin struct{}
 
-func (p *PostgreSQLPlugin) Name() string   { return "postgresql" }
+func (p *PostgreSQLPlugin) Name() string     { return "postgresql" }
 func (p *PostgreSQLPlugin) DefaultPort() int { return 5432 }
 
 func (p *PostgreSQLPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -31,7 +31,7 @@ func (p *PostgreSQLPlugin) Brute(ctx context.Context, host string, port int, use
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "postgresql", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "postgresql", Success: false, Message: "canceled"}
 			default:
 			}
 

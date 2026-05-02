@@ -46,12 +46,12 @@ func ParseTargetsForPortScan(target string) *TargetParseResult {
 			port := info.Port
 			if port == 0 {
 				// 根据协议推断端口
-			switch info.Protocol {
-			case "https":
-				port = 443
-			case "http":
-				port = 80
-			}
+				switch info.Protocol {
+				case "https":
+					port = 443
+				case "http":
+					port = 80
+				}
 			}
 			if port > 0 {
 				result.WithPort = append(result.WithPort, &ParsedTarget{

@@ -14,7 +14,7 @@ import (
 // MySQLPlugin MySQL爆破插件
 type MySQLPlugin struct{}
 
-func (p *MySQLPlugin) Name() string   { return "mysql" }
+func (p *MySQLPlugin) Name() string     { return "mysql" }
 func (p *MySQLPlugin) DefaultPort() int { return 3306 }
 
 func (p *MySQLPlugin) Probe(ctx context.Context, host string, port int) bool {
@@ -31,7 +31,7 @@ func (p *MySQLPlugin) Brute(ctx context.Context, host string, port int, username
 		for _, password := range passwords {
 			select {
 			case <-ctx.Done():
-				return &BruteResult{Host: host, Port: port, Service: "mysql", Success: false, Message: "cancelled"}
+				return &BruteResult{Host: host, Port: port, Service: "mysql", Success: false, Message: "canceled"}
 			default:
 			}
 
