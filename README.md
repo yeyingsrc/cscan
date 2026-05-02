@@ -6,10 +6,10 @@
 
 **CSCAN-企业级分布式网络资产扫描平台**
 
-[![Go](https://img.shields.io/badge/Go-1.25.1-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.25.7-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![Vue](https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat-square&logo=vue.js)](https://vuejs.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-3.3-green)](VERSION)
+[![Version](https://img.shields.io/badge/Version-3.4-green)](VERSION)
 
 [中文](README.md) · [English](README_EN.md)
 
