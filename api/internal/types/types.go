@@ -2747,7 +2747,7 @@ type TaskRecoveryStatsResp struct {
 // ==================== 应用管理 ====================
 
 type AppListReq struct {
-	App      string `json:"app,optional"`
+	Query    string `json:"query,optional"`
 	OrgId    string `json:"orgId,optional"`
 	Page     int    `json:"page"`
 	PageSize int    `json:"pageSize"`

@@ -46,7 +46,7 @@ func (l *AppListLogic) AppList(req *types.AppListReq) (*types.AppListResp, error
 
 	orgMap := common.LoadOrgMap(l.ctx, l.svcCtx)
 	filtered := make([]model.StatResult, 0, len(stats))
-	keyword := strings.TrimSpace(req.App)
+	keyword := strings.TrimSpace(req.Query)
 	for _, stat := range stats {
 		if keyword == "" || strings.Contains(strings.ToLower(stat.Field), strings.ToLower(keyword)) {
 			filtered = append(filtered, stat)
