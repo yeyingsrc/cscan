@@ -351,6 +351,11 @@ func parseTargets(target string) []string {
 	return targets
 }
 
+// EstimatePortCount 估算端口字符串展开后的端口数量，用于估算扫描耗时
+func EstimatePortCount(portStr string) int {
+	return len(parsePorts(portStr))
+}
+
 // parsePorts 解析端口
 func parsePorts(portStr string) []int {
 	var ports []int

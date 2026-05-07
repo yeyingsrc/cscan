@@ -1614,23 +1614,41 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 			config.PortScan.Workers = w.config.Concurrency
 		}
 
-		// 按单目标超时计算总超时：单目标超时 × 目标数 / 并发数
+		// 端口扫描在 naabu/masscan 内部按目标串行执行（见 scanner/naabu.go runNaabuWithLogger）
+		// 故总超时 = 用户单目标超时 × 目标数；并基于端口数/速率/重试估算下限，避免大端口范围低速率被截断
 		singleTimeout := config.PortScan.Timeout
 		if singleTimeout <= 0 {
 			singleTimeout = 5
 		}
-		portConcurrency := config.PortScan.Workers
-		if portConcurrency <= 0 {
-			portConcurrency = 1
-		}
 		// 粗略估算目标数（按换行分割）
 		portTargetCount := len(strings.Split(strings.TrimSpace(target), "\n"))
-		portScanTimeout := singleTimeout * portTargetCount / portConcurrency
-		if portScanTimeout < 60 {
-			portScanTimeout = 60
+		if portTargetCount <= 0 {
+			portTargetCount = 1
 		}
-		w.taskLog(task.TaskId, LevelInfo, "Port scan: timeout=%ds (single=%ds, targets=%d, concurrency=%d)",
-			portScanTimeout, singleTimeout, portTargetCount, portConcurrency)
+
+		portScanTimeout := singleTimeout * portTargetCount
+
+		// 估算最小耗时：每目标 ports*(1+retries)*1.5/rate 秒（1.5 为安全系数）
+		portCount := scanner.EstimatePortCount(config.PortScan.Ports)
+		rate := config.PortScan.Rate
+		if rate <= 0 {
+			rate = 1000
+		}
+		retries := config.PortScan.Retries
+		if retries < 0 {
+			retries = 0
+		}
+		estimatedPerTarget := portCount * (1 + retries) * 3 / (rate * 2)
+		if estimatedPerTarget < 60 {
+			estimatedPerTarget = 60
+		}
+		minTotal := estimatedPerTarget * portTargetCount
+		if portScanTimeout < minTotal {
+			portScanTimeout = minTotal
+		}
+
+		w.taskLog(task.TaskId, LevelInfo, "Port scan: timeout=%ds (single=%ds, targets=%d, ports=%d, rate=%d, estimatedPerTarget=%ds)",
+			portScanTimeout, singleTimeout, portTargetCount, portCount, rate, estimatedPerTarget)
 		portCtx, portCancel := context.WithTimeout(ctx, time.Duration(portScanTimeout)*time.Second)
 
 		// 根据配置选择端口发现工具（默认使用Naabu)

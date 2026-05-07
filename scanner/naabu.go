@@ -210,6 +210,9 @@ func (s *NaabuScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResul
 		}
 	}
 
+	// 保留原始端口配置（"top100"/"top1000"），用于 naabu SDK 原生 TopPorts 参数
+	originalPorts := opts.Ports
+
 	ports := parsePorts(opts.Ports)
 	portSet := make(map[int]bool)
 	for _, p := range ports {
@@ -228,7 +231,13 @@ func (s *NaabuScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResul
 	}
 
 	targets := cleanTargets
-	opts.Ports = portsToString(ports)
+
+	// 当存在附带端口的合并时，需要展开为具体端口列表；否则保留原始配置
+	if len(targetParseResult.WithPort) > 0 {
+		opts.Ports = portsToString(ports)
+	} else {
+		opts.Ports = originalPorts
+	}
 
 	if len(targets) == 0 {
 		return &ScanResult{
@@ -285,13 +294,8 @@ func (s *NaabuScanner) runNaabuWithLogger(ctx context.Context, targets []string,
 		portsStr = optimizePortsForNaabu(opts.Ports)
 	}
 
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = 60
-	}
-
 	totalTargets := len(targets)
-	logInfo("Naabu: scanning %d targets, timeout %ds/target, skipHostDiscovery=%v, excludeCDN=%v, excludeHosts=%s, ports=%s", totalTargets, timeout, opts.SkipHostDiscovery, opts.ExcludeCDN, opts.ExcludeHosts, opts.Ports)
+	logInfo("Naabu: scanning %d targets, skipHostDiscovery=%v, excludeCDN=%v, excludeHosts=%s, ports=%s", totalTargets, opts.SkipHostDiscovery, opts.ExcludeCDN, opts.ExcludeHosts, opts.Ports)
 
 	// 串行扫描每个目标
 	for i, target := range targets {
@@ -341,24 +345,19 @@ func (s *NaabuScanner) scanSingleTargetWithLogger(ctx context.Context, target, p
 	var foundPorts []string // 收集发现的端口
 	thresholdExceeded := false
 
-	// 单个目标超时
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = 60
-	}
-	targetCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
+	// 外层 portCtx（worker 已基于端口数/速率估算）控制超时，此处不再重复包裹
+	targetCtx := ctx
 
 	// 调试日志：打印扫描配置
-	logInfo("Naabu: scanning %s, ports=%s, topPorts=%s, rate=%d, workers=%d, retries=%d, warmUpTime=%d, scanType=%s, skipHostDiscovery=%v, excludeCDN=%v, excludeHosts=%s, timeout=%ds, verify=%v",
-		target, portsStr, topPorts, opts.Rate, opts.Workers, opts.Retries, opts.WarmUpTime, opts.ScanType, opts.SkipHostDiscovery, opts.ExcludeCDN, opts.ExcludeHosts, timeout, opts.Verify)
+	logInfo("Naabu: scanning %s, ports=%s, topPorts=%s, rate=%d, workers=%d, retries=%d, warmUpTime=%d, scanType=%s, skipHostDiscovery=%v, excludeCDN=%v, excludeHosts=%s, verify=%v",
+		target, portsStr, topPorts, opts.Rate, opts.Workers, opts.Retries, opts.WarmUpTime, opts.ScanType, opts.SkipHostDiscovery, opts.ExcludeCDN, opts.ExcludeHosts, opts.Verify)
 
 	options := runner.Options{
 		Host:          goflags.StringSlice([]string{target}),
 		Ports:         portsStr,
 		TopPorts:      topPorts,
 		Rate:          opts.Rate,
-		Timeout:       10, // 单个端口连接超时（增加到10秒）
+		Timeout:       10 * time.Second, // 单端口连接超时（匹配 naabu CLI -timeout 10s）
 		ScanType:      opts.ScanType,
 		Silent:        true,
 		PortThreshold: opts.PortThreshold, // 使用 Naabu 原生端口阈值参数
@@ -449,7 +448,7 @@ func (s *NaabuScanner) scanSingleTargetWithLogger(ctx context.Context, target, p
 	}
 
 	// 打印完整的naabu配置
-	logInfo("Naabu config: Host=%v, Ports=%s, TopPorts=%s, Rate=%d, Timeout=%d, ScanType=%s, Silent=%v, PortThreshold=%d, SkipHostDiscovery=%v, ExcludeCDN=%v, ExcludeIps=%s, Retries=%d, WarmUpTime=%d, Threads=%d, Verify=%v",
+	logInfo("Naabu config: Host=%v, Ports=%s, TopPorts=%s, Rate=%d, Timeout=%v, ScanType=%s, Silent=%v, PortThreshold=%d, SkipHostDiscovery=%v, ExcludeCDN=%v, ExcludeIps=%s, Retries=%d, WarmUpTime=%d, Threads=%d, Verify=%v",
 		options.Host, options.Ports, options.TopPorts, options.Rate, options.Timeout, options.ScanType, options.Silent, options.PortThreshold, options.SkipHostDiscovery, options.ExcludeCDN, options.ExcludeIps, options.Retries, options.WarmUpTime, options.Threads, options.Verify)
 
 	logInfo("Naabu: creating runner for %s", target)
@@ -479,7 +478,7 @@ func (s *NaabuScanner) scanSingleTargetWithLogger(ctx context.Context, target, p
 			mu.Unlock()
 		} else if targetCtx.Err() == context.DeadlineExceeded {
 			// 超时：保留已识别的结果
-			logWarn("Naabu: %s timeout after %ds, keeping %d ports found", target, timeout, len(assets))
+			logWarn("Naabu: %s timeout, keeping %d ports found", target, len(assets))
 		} else if ctx.Err() == nil {
 			logWarn("Naabu: %s error: %v", target, err)
 		}
