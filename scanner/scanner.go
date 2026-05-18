@@ -67,7 +67,8 @@ type ScanResult struct {
 	Assets          []*Asset          `json:"assets"`
 	Vulnerabilities []*Vulnerability  `json:"vulnerabilities"`
 	JSFinderResults []*JSFinderResult `json:"jsfinderResults,omitempty"`
-	SkippedHosts    []string          `json:"skippedHosts,omitempty"` // 因端口阈值超限被跳过的主机列表
+	SkippedHosts    []string          `json:"skippedHosts,omitempty"`    // 因端口阈值超限被跳过的主机列表
+	DNSFailedHosts  []string          `json:"dnsFailedHosts,omitempty"` // DNS解析失败的主机列表
 }
 
 // Asset 资产

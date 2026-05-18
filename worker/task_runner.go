@@ -251,11 +251,15 @@ func (r *TaskRunner) Run(ctx context.Context, task *scheduler.TaskInfo, worker *
 		// 标记阶段完成
 		taskCtx.CompletedPhases[phaseConfig.Phase] = true
 
-		// 每完成一个模块即递增主任务计数器（subTaskCount = 目标数 × 模块数）
+		// 每完成一个模块即递增主任务计数器（subTaskCount = 批次数 × (模块数 + 1)）
 		if worker != nil {
-			targetCount := len(ParseTargets(taskCtx.Target))
-			worker.incrSubTaskDone(ctx, task, phaseConfig.Name, true, targetCount)
+			worker.incrSubTaskDone(ctx, task, phaseConfig.Name, false, 1)
 		}
+	}
+
+	// 最终完成递增（+1 对应公式中的 +1）
+	if worker != nil {
+		worker.incrSubTaskDone(ctx, task, "完成", true, 1)
 	}
 
 	return r.buildResult(taskCtx, startTime, nil)
@@ -418,10 +422,16 @@ func (r *TaskRunner) executePhaseDefault(taskCtx *TaskContext, phaseConfig Phase
 		return &PhaseResult{}, nil
 	}
 
+	// 合并 DNS 解析失败的主机到 SkippedHosts，后续阶段自动跳过
+	skippedHosts := result.SkippedHosts
+	if len(result.DNSFailedHosts) > 0 {
+		skippedHosts = append(skippedHosts, result.DNSFailedHosts...)
+	}
+
 	return &PhaseResult{
 		Assets:          result.Assets,
 		Vulnerabilities: result.Vulnerabilities,
-		SkippedHosts:    result.SkippedHosts,
+		SkippedHosts:    skippedHosts,
 	}, nil
 }
 

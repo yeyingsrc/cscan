@@ -592,9 +592,8 @@ func (w *Worker) processTaskLoop() {
 			ctx := context.Background()
 			if ctrl := w.checkTaskControl(ctx, task.TaskId); ctrl == "STOP" {
 				w.taskLog(task.TaskId, LevelInfo, "Task %s skipped because it was stopped while waiting in queue", task.TaskId)
-				// 即使队列内被丢弃也要推动主任务计数，否则 sub_task_done 永远到不了 sub_task_count
-				incr := w.getTargetCountFromConfig(task.Config)
-				w.incrSubTaskDone(ctx, task, "完成", true, incr)
+				// 队列内被丢弃时一次性发出本批次应有的全部增量，避免 sub_task_done 永远到不了 sub_task_count
+				w.incrSubTaskDone(ctx, task, "完成", true, w.expectedTaskIncr(task.Config))
 				continue
 			}
 			w.logger.Info("processTaskLoop: calling executeTask for task %s", task.TaskId)
@@ -1079,7 +1078,9 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 	// PAUSE 信号下跳过，恢复后由新一轮执行递增。
 	// 此 defer 在 cleanup state defer 之后注册，按 LIFO 先执行，可在控制信号被清除前读取。
 	finalIncrSent := false
-	targetCount := 0 // 目标数，在目标解析后赋值，用于每次模块完成时递增计数
+	targetCount := 0    // 仅用于日志展示
+	expectedIncr := 1   // 单 sub-task 应发增量 = enabledModules + 1，配置解析后赋真值
+	incrSent := 0       // 已发出的增量数
 	defer func() {
 		if finalIncrSent {
 			return
@@ -1088,11 +1089,11 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if ctrl := w.checkTaskControl(bgCtx, task.TaskId); ctrl == "PAUSE" {
 			return
 		}
-		incr := targetCount
-		if incr <= 0 {
-			incr = 1
+		remaining := expectedIncr - incrSent
+		if remaining < 1 {
+			remaining = 1
 		}
-		w.incrSubTaskDone(bgCtx, task, "完成", true, incr)
+		w.incrSubTaskDone(bgCtx, task, "完成", true, remaining)
 	}()
 
 	// 检查是否有停止信号（任务可能在队列中被停止)
@@ -1121,6 +1122,9 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		return
 	}
 	w.taskLog(task.TaskId, LevelInfo, "Step 6: Config parsed successfully, keys=%d", len(taskConfig))
+
+	// 计算本 sub-task 应发出的总增量数 = 启用模块数 + 1，供早退路径与最终路径补齐使用
+	expectedIncr = utils.CountEnabledModules(taskConfig) + 1
 
 	// 检查任务类型，处理POC验证任务
 	taskType, _ := taskConfig["taskType"].(string)
@@ -1286,7 +1290,11 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		}
 		if len(targets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "All targets filtered by blacklist, marking task as complete")
-			w.incrSubTaskDone(ctx, task, "完成", true, targetCount)
+			blacklistRemaining := expectedIncr - incrSent
+			if blacklistRemaining < 1 {
+				blacklistRemaining = 1
+			}
+			w.incrSubTaskDone(ctx, task, "完成", true, blacklistRemaining)
 			finalIncrSent = true
 			w.updateTaskStatus(ctx, task.TaskId, scheduler.TaskStatusSuccess, "All targets filtered by blacklist")
 			return
@@ -1618,7 +1626,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 
 		completedPhases["domainscan"] = true
 		// 子域名扫描模块完成，递增子任务进度
-		w.incrSubTaskDone(ctx, task, "子域名扫描", false, targetCount)
+		w.incrSubTaskDone(ctx, task, "子域名扫描", false, 1)
+		incrSent++
 	}
 
 	// 执行端口扫描（只有明确启用时才执行）
@@ -1721,6 +1730,10 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 				if len(masscanResult.SkippedHosts) > 0 {
 					skippedHosts = append(skippedHosts, masscanResult.SkippedHosts...)
 				}
+				if len(masscanResult.DNSFailedHosts) > 0 {
+					skippedHosts = append(skippedHosts, masscanResult.DNSFailedHosts...)
+					w.taskLog(task.TaskId, LevelInfo, "DNS resolution failed for %d hosts, will skip in subsequent phases", len(masscanResult.DNSFailedHosts))
+				}
 			}
 		default: // naabu
 			w.taskLog(task.TaskId, LevelInfo, "Port scan: Naabu")
@@ -1754,6 +1767,10 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 				if len(naabuResult.SkippedHosts) > 0 {
 					skippedHosts = append(skippedHosts, naabuResult.SkippedHosts...)
 				}
+				if len(naabuResult.DNSFailedHosts) > 0 {
+					skippedHosts = append(skippedHosts, naabuResult.DNSFailedHosts...)
+					w.taskLog(task.TaskId, LevelInfo, "DNS resolution failed for %d hosts, will skip in subsequent phases", len(naabuResult.DNSFailedHosts))
+				}
 			}
 		}
 
@@ -1784,7 +1801,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		}
 		completedPhases["portscan"] = true
 		// 端口扫描模块完成，递增子任务进度
-		w.incrSubTaskDone(ctx, task, "端口扫描", false, targetCount)
+		w.incrSubTaskDone(ctx, task, "端口扫描", false, 1)
+		incrSent++
 	}
 
 	// 检查控制信号
@@ -1809,7 +1827,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if len(allAssets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "Port identify: skipped (no assets)")
 			completedPhases["portidentify"] = true
-			w.incrSubTaskDone(ctx, task, "端口识别", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "端口识别", false, 1)
+			incrSent++
 		} else {
 			// 检查控制信号
 			if w.handleTaskControl(ctx, task, completedPhases, allAssets, "") {
@@ -1827,7 +1846,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 			}
 			completedPhases["portidentify"] = true
 			// 端口识别模块完成，递增子任务进度
-			w.incrSubTaskDone(ctx, task, "端口识别", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "端口识别", false, 1)
+			incrSent++
 		}
 	}
 
@@ -1853,7 +1873,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if len(allAssets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "Fingerprint: skipped (no assets)")
 			completedPhases["fingerprint"] = true
-			w.incrSubTaskDone(ctx, task, "指纹识别", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "指纹识别", false, 1)
+			incrSent++
 		} else {
 			// 在指纹识别开始前检查停止信号
 			if ctrl := w.checkTaskControl(ctx, task.TaskId); ctrl == "STOP" {
@@ -2036,7 +2057,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 			}
 			completedPhases["fingerprint"] = true
 			// 指纹识别模块完成，递增子任务进度
-			w.incrSubTaskDone(ctx, task, "指纹识别", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "指纹识别", false, 1)
+			incrSent++
 		} // 结束 len(allAssets) > 0 的 else 分支
 	}
 
@@ -2068,7 +2090,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if len(allAssets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "Brute scan: skipped (no assets)")
 			completedPhases["brutescan"] = true
-			w.incrSubTaskDone(ctx, task, "弱口令扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "弱口令扫描", false, 1)
+			incrSent++
 		} else {
 			// 检查控制信号
 			if w.handleTaskControl(ctx, task, completedPhases, allAssets, "") {
@@ -2084,7 +2107,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 				w.taskLog(task.TaskId, LevelInfo, "Brute scan completed: found %d weak passwords", len(bruteVulns))
 			}
 			completedPhases["brutescan"] = true
-			w.incrSubTaskDone(ctx, task, "弱口令扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "弱口令扫描", false, 1)
+			incrSent++
 		}
 	}
 
@@ -2109,7 +2133,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if len(allAssets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "Dir scan: skipped (no assets)")
 			completedPhases["dirscan"] = true
-			w.incrSubTaskDone(ctx, task, "目录扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "目录扫描", false, 1)
+			incrSent++
 		} else {
 			// 检查控制信号
 			if w.handleTaskControl(ctx, task, completedPhases, allAssets, "") {
@@ -2128,7 +2153,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 				// 目录扫描结果已在 executeDirScan 中通过 saveDirScanResults 保存到数据库
 			}
 			completedPhases["dirscan"] = true
-			w.incrSubTaskDone(ctx, task, "目录扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "目录扫描", false, 1)
+			incrSent++
 		}
 	}
 
@@ -2152,7 +2178,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if len(allAssets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "JSFinder: skipped (no assets)")
 			completedPhases["jsfinder"] = true
-			w.incrSubTaskDone(ctx, task, "JS扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "JS扫描", false, 1)
+			incrSent++
 		} else {
 			if w.handleTaskControl(ctx, task, completedPhases, allAssets, "") {
 				return
@@ -2198,7 +2225,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 			}
 			w.updateTaskProgressWithPhase(ctx, task.TaskId, 85, "JS扫描完成", "JS扫描")
 			completedPhases["jsfinder"] = true
-			w.incrSubTaskDone(ctx, task, "JS扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "JS扫描", false, 1)
+			incrSent++
 		}
 	}
 
@@ -2223,7 +2251,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 		if len(allAssets) == 0 {
 			w.taskLog(task.TaskId, LevelInfo, "POC scan: skipped (no assets)")
 			completedPhases["pocscan"] = true
-			w.incrSubTaskDone(ctx, task, "漏洞扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "漏洞扫描", false, 1)
+			incrSent++
 		} else {
 			// 在POC扫描开始前检查停止信号
 			if ctrl := w.checkTaskControl(ctx, task.TaskId); ctrl == "STOP" {
@@ -2481,7 +2510,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 				}
 			}
 			// POC扫描模块完成，递增子任务进度
-			w.incrSubTaskDone(ctx, task, "漏洞扫描", false, targetCount)
+			w.incrSubTaskDone(ctx, task, "漏洞扫描", false, 1)
+			incrSent++
 		} // 结束 len(allAssets) > 0 的 else 分支
 	}
 
@@ -2489,9 +2519,14 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 	duration := time.Since(startTime).Seconds()
 	result := fmt.Sprintf("Assets:%d Vuls:%d Duration:%.0fs", len(allAssets), len(allVuls), duration)
 
-	// 显式递增计数器，确保 progress=100 与 status=SUCCESS 原子落盘
-	// TaskRunner.Run 内每个模块已完成递增，此处为最终确认
-	w.incrSubTaskDone(ctx, task, "完成", true, targetCount)
+	// 显式递增计数器，确保 progress=100 与 status=SUCCESS 原子落盘。
+	// 正常路径下各模块已递增 enabledModules 次，此处补齐最终 +1 即可；
+	// 若中途有路径未发出预期增量，clamp 兜底确保 sub_task_done 不超 sub_task_count。
+	finalRemaining := expectedIncr - incrSent
+	if finalRemaining < 1 {
+		finalRemaining = 1
+	}
+	w.incrSubTaskDone(ctx, task, "完成", true, finalRemaining)
 	finalIncrSent = true
 
 	w.updateTaskStatus(ctx, task.TaskId, scheduler.TaskStatusSuccess, result)
@@ -2544,23 +2579,21 @@ func (w *Worker) updateTaskProgressWithPhase(ctx context.Context, taskId string,
 	}
 }
 
-// getTargetCountFromConfig 从任务配置中提取目标数量
-func (w *Worker) getTargetCountFromConfig(configStr string) int {
-	var config map[string]interface{}
-	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+// expectedTaskIncr 根据任务配置计算单个 sub-task 应发出的总增量数：
+// = 启用模块数 + 1（每模块 1 次 + 最终完成 1 次）。配置解析失败时回退为 1。
+// 早退路径据此补齐，避免主任务计数永远到不了 sub_task_count。
+func (w *Worker) expectedTaskIncr(configStr string) int {
+	var cfg map[string]interface{}
+	if err := json.Unmarshal([]byte(configStr), &cfg); err != nil {
 		return 1
 	}
-	target, _ := config["target"].(string)
-	if target == "" {
-		return 1
-	}
-	return len(strings.Split(strings.TrimSpace(target), "\n"))
+	return utils.CountEnabledModules(cfg) + 1
 }
 
 // incrSubTaskDone 递增子任务完成数（模块级别）
 // 每完成一个扫描模块就调用此方法，通知主任务进度更新
 // isCompleted: true 表示子任务全部阶段完成，此时才递增计数器
-// incrAmount: 递增数量（=目标数），默认1
+// incrAmount: 递增数量（早退路径下需补齐 expectedTaskIncr - alreadySent，正常路径恒为 1）
 func (w *Worker) incrSubTaskDone(ctx context.Context, task *scheduler.TaskInfo, phase string, isCompleted bool, incrAmount int) {
 	// 添加 panic 恢复机制
 	defer func() {

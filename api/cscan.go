@@ -14,6 +14,7 @@ import (
 	"cscan/api/internal/logic"
 	"cscan/api/internal/svc"
 	"cscan/model"
+	"cscan/pkg/utils"
 	"cscan/scheduler"
 
 	"github.com/google/uuid"
@@ -179,68 +180,14 @@ func createAndPushCronTask(ctx context.Context, svcCtx *svc.ServiceContext, sche
 		}
 	}
 
-	// 计算启用的模块数（与 worker/worker.go 中的 enabledPhases 计算保持一致）
-	// 关键规则：portscan 默认启用（enable != false），其他模块需要 enable == true
-	enabledModules := 0
+	// 计算启用的模块数（与 worker/worker.go 中的模块执行逻辑保持一致）
+	// 规则：所有模块（含 portscan）必须显式 enable == true 才计数
+	enabledModules := utils.CountEnabledModules(taskConfig)
 
-	// DomainScan
-	if ds, ok := taskConfig["domainscan"].(map[string]interface{}); ok {
-		if enable, _ := ds["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-
-	// PortScan (default enabled if missing or nil, same as task_builder.go logic)
-	if ps, ok := taskConfig["portscan"].(map[string]interface{}); ok {
-		if enable, ok := ps["enable"].(bool); ok && enable {
-			enabledModules++
-		}
-		// Note: if portscan exists but enable is not true (or is false), don't count
-		// This matches task_builder.go logic
-	} else {
-		// portscan is nil or doesn't exist, count as enabled (default behavior)
-		enabledModules++
-	}
-
-	// Fingerprint
-	if fp, ok := taskConfig["fingerprint"].(map[string]interface{}); ok {
-		if enable, _ := fp["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-	// PocScan
-	if poc, ok := taskConfig["pocscan"].(map[string]interface{}); ok {
-		if enable, _ := poc["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-	// DirScan
-	if dir, ok := taskConfig["dirscan"].(map[string]interface{}); ok {
-		if enable, _ := dir["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-	// PortIdentify (missing from original code, but should be included)
-	if pi, ok := taskConfig["portidentify"].(map[string]interface{}); ok {
-		if enable, _ := pi["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-	// BruteScan
-	if bs, ok := taskConfig["brutescan"].(map[string]interface{}); ok {
-		if enable, _ := bs["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-	// JSFinder
-	if js, ok := taskConfig["jsfinder"].(map[string]interface{}); ok {
-		if enable, _ := js["enable"].(bool); enable {
-			enabledModules++
-		}
-	}
-
-	if enabledModules == 0 {
-		enabledModules = 1
+	// 用于自动 batch 计算时避免除零；真实计数 enabledModules 在 subTaskCount 中单独使用
+	modulesForBatching := enabledModules
+	if modulesForBatching == 0 {
+		modulesForBatching = 1
 	}
 
 	// 自动计算最佳批次大小
@@ -252,7 +199,7 @@ func createAndPushCronTask(ctx context.Context, svcCtx *svc.ServiceContext, sche
 		maxBatch    = 200
 	)
 	targetCount := len(validTargets)
-	optimalBatches := (minSubTasks + maxSubTasks) / 2 / enabledModules
+	optimalBatches := (minSubTasks + maxSubTasks) / 2 / modulesForBatching
 	if optimalBatches < 1 {
 		optimalBatches = 1
 	}
@@ -287,9 +234,13 @@ func createAndPushCronTask(ctx context.Context, svcCtx *svc.ServiceContext, sche
 		batches = []string{msg.Target}
 	}
 
-	// 子任务计数器在 worker 端每完成一个子任务（一个 batch 的全部阶段）才递增一次，
-	// 因此 subTaskCount 必须等于 batches 数量，否则任务永远卡在 progress<100% 而不会被标记为 SUCCESS。
-	subTaskCount := len(batches)
+	// subTaskCount = 批次数 × (启用模块数 + 1)，+1 为每批次最终完成递增
+	// worker 端每完成一个模块递增 1，进度 = done / total × 100
+	// 无任何模块启用时，worker 仅发 1 次最终增量，故 subTaskCount = batches
+	subTaskCount := len(batches) * (enabledModules + 1)
+	if enabledModules == 0 {
+		subTaskCount = len(batches)
+	}
 
 	// 更新任务状态为 STARTED
 	now := time.Now()
@@ -386,7 +337,7 @@ func createAndPushCronTask(ctx context.Context, svcCtx *svc.ServiceContext, sche
 
 const (
 	orphanedTaskCheckInterval = 5 * time.Minute
-	orphanedTaskThreshold     = 30 * time.Minute
+	orphanedTaskThreshold     = 10 * time.Minute
 )
 
 // startOrphanedTaskRecovery 启动孤儿任务恢复后台任务
@@ -398,6 +349,9 @@ func startOrphanedTaskRecovery(svcCtx *svc.ServiceContext) {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// 优先通过 Redis 心跳快速检测离线 Worker 的任务
+		logic.RecoverOrphanedByHeartbeat(context.Background(), svcCtx)
+		// 兜底：通过 MongoDB update_time 阈值检测卡住的任务
 		logic.RecoverOrphanedTasks(context.Background(), svcCtx, orphanedTaskThreshold)
 		logic.CleanupStaleProcessingTasks(context.Background(), svcCtx, "")
 	}

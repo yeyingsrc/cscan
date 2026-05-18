@@ -29,8 +29,9 @@ var ipLocator = geolocation.NewIPLocator()
 // NaabuScanner Naabu端口扫描器
 type NaabuScanner struct {
 	BaseScanner
-	skippedHosts []string // 因端口阈值超限被跳过的主机
-	mu           sync.Mutex
+	skippedHosts   []string // 因端口阈值超限被跳过的主机
+	dnsFailedHosts []string // DNS解析失败的主机
+	mu             sync.Mutex
 }
 
 // NewNaabuScanner 创建Naabu扫描器
@@ -47,6 +48,15 @@ func (s *NaabuScanner) collectSkippedHosts() []string {
 	defer s.mu.Unlock()
 	result := make([]string, len(s.skippedHosts))
 	copy(result, s.skippedHosts)
+	return result
+}
+
+// collectDNSFailedHosts 收集DNS解析失败的主机列表
+func (s *NaabuScanner) collectDNSFailedHosts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]string, len(s.dnsFailedHosts))
+	copy(result, s.dnsFailedHosts)
 	return result
 }
 
@@ -89,6 +99,7 @@ func (s *NaabuScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResul
 	// 重置跳过主机列表（扫描器可能被复用）
 	s.mu.Lock()
 	s.skippedHosts = s.skippedHosts[:0]
+	s.dnsFailedHosts = s.dnsFailedHosts[:0]
 	s.mu.Unlock()
 
 	// 默认配置 - 使用自适应参数，根据系统硬件自动调整
@@ -252,18 +263,20 @@ func (s *NaabuScanner) Scan(ctx context.Context, config *ScanConfig) (*ScanResul
 
 	if thresholdExceeded {
 		return &ScanResult{
-			WorkspaceId:  config.WorkspaceId,
-			MainTaskId:   config.MainTaskId,
-			Assets:       assets,
-			SkippedHosts: s.collectSkippedHosts(),
+			WorkspaceId:    config.WorkspaceId,
+			MainTaskId:     config.MainTaskId,
+			Assets:         assets,
+			SkippedHosts:   s.collectSkippedHosts(),
+			DNSFailedHosts: s.collectDNSFailedHosts(),
 		}, ErrPortThresholdExceeded
 	}
 
 	return &ScanResult{
-		WorkspaceId:  config.WorkspaceId,
-		MainTaskId:   config.MainTaskId,
-		Assets:       assets,
-		SkippedHosts: s.collectSkippedHosts(),
+		WorkspaceId:    config.WorkspaceId,
+		MainTaskId:     config.MainTaskId,
+		Assets:         assets,
+		SkippedHosts:   s.collectSkippedHosts(),
+		DNSFailedHosts: s.collectDNSFailedHosts(),
 	}, nil
 }
 
@@ -476,6 +489,12 @@ func (s *NaabuScanner) scanSingleTargetWithLogger(ctx context.Context, target, p
 			assets = nil
 			foundPorts = nil
 			mu.Unlock()
+		} else if strings.Contains(errStr, "no valid ipv4 or ipv6 targets") {
+			// DNS解析失败：记录主机，后续阶段跳过
+			s.mu.Lock()
+			s.dnsFailedHosts = append(s.dnsFailedHosts, target)
+			s.mu.Unlock()
+			logWarn("Naabu: %s DNS resolution failed, skipping in subsequent phases", target)
 		} else if targetCtx.Err() == context.DeadlineExceeded {
 			// 超时：保留已识别的结果
 			logWarn("Naabu: %s timeout, keeping %d ports found", target, len(assets))

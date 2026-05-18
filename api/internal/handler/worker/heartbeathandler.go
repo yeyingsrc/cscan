@@ -1,11 +1,13 @@
 package worker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
+	"cscan/api/internal/logic"
 	"cscan/api/internal/svc"
 	"cscan/pkg/response"
 	"cscan/rpc/task/pb"
@@ -147,6 +149,16 @@ func WorkerOfflineHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		rdb.Del(r.Context(), controlKey)
 
 		logx.Infof("[WorkerOffline] Worker %s offline, deleted from Redis", req.WorkerName)
+
+		// 立即恢复该 Worker 处理中的任务（使用独立 context，不受 HTTP 连接断开影响）
+		recoverCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		recoveredTasks, err := logic.RecoverWorkerTasks(recoverCtx, svcCtx, req.WorkerName)
+		if err != nil {
+			logx.Errorf("[WorkerOffline] Failed to recover tasks for worker %s: %v", req.WorkerName, err)
+		} else if len(recoveredTasks) > 0 {
+			logx.Infof("[WorkerOffline] Worker %s: recovered %d orphaned tasks", req.WorkerName, len(recoveredTasks))
+		}
 
 		httpx.OkJson(w, &WorkerOfflineResp{
 			Code:    0,

@@ -8,6 +8,7 @@ import (
 
 	"cscan/api/internal/svc"
 	"cscan/model"
+	"cscan/pkg/utils"
 	"cscan/scanner"
 	"cscan/scheduler"
 
@@ -62,11 +63,14 @@ func (b *TaskBuilder) BuildAndPushSubTasks(workspaceId string, task *model.MainT
 	}(timeoutCtx, cancel)
 
 	// 3. Calculate SubTask Count
-	// 每个目标的每个扫描模块 = 一个子任务，subTaskCount = 目标数 × 启用模块数
-	// worker 端每完成一个模块就递增一次 sub_task_done，进度 = done / total × 100
-	enabledModules := b.countEnabledModules(taskConfig)
-	targetCount := splitter.GetTargetCount(task.Target)
-	subTaskCount := targetCount * enabledModules
+	// subTaskCount = 批次数 × (启用模块数 + 1)，+1 为每批次最终完成递增
+	// worker 端每完成一个模块递增 1，进度 = done / total × 100
+	// 无任何模块启用时，worker 仅发 1 次最终增量，故 subTaskCount = batches
+	enabledModules := utils.CountEnabledModules(taskConfig)
+	subTaskCount := len(batches) * (enabledModules + 1)
+	if enabledModules == 0 {
+		subTaskCount = len(batches)
+	}
 
 	// 4. Update Main Task Status
 	now := time.Now()
@@ -290,47 +294,6 @@ func convertScannerAssetToModelAsset(task *model.MainTask, scanAsset *scanner.As
 	return asset
 }
 
-func (b *TaskBuilder) countEnabledModules(configMap map[string]interface{}) int {
-	// 与 worker/worker.go 中的 enabledPhases 计算保持一致
-	// 关键规则：portscan 默认启用（enable != false），其他模块需要 enable == true
-	count := 0
-
-	// DomainScan
-	if ds, ok := configMap["domainscan"].(map[string]interface{}); ok {
-		if enable, ok := ds["enable"].(bool); ok && enable {
-			count++
-		}
-	}
-
-	// PortScan (default enabled if missing or nil, same as worker logic)
-	if ps, ok := configMap["portscan"].(map[string]interface{}); ok {
-		if enable, ok := ps["enable"].(bool); ok && enable {
-			count++
-		}
-		// Note: if portscan exists but enable is not true (or is false), don't count
-		// This matches worker logic: if config.PortScan != nil && config.PortScan.Enable
-	} else {
-		// portscan is nil or doesn't exist, count as enabled (default behavior)
-		count++
-	}
-
-	// Other modules (must be explicitly enabled)
-	// 修复：将 brutescan 也纳入统计，与 portidentify 等模块保持一致
-	modules := []string{"portidentify", "fingerprint", "brutescan", "dirscan", "jsfinder", "pocscan"}
-	for _, mod := range modules {
-		if m, ok := configMap[mod].(map[string]interface{}); ok {
-			if enable, ok := m["enable"].(bool); ok && enable {
-				count++
-			}
-		}
-	}
-
-	if count == 0 {
-		return 1
-	}
-	return count
-}
-
 func (b *TaskBuilder) cacheTaskInfo(workspaceId string, task *model.MainTask, subTaskCount, batchCount, modules int) {
 	key := fmt.Sprintf("cscan:task:info:%s", task.TaskId)
 	data := map[string]interface{}{
@@ -369,8 +332,11 @@ func (b *TaskBuilder) CalculateOptimalBatchSize(target string, taskConfig map[st
 	splitter := scheduler.NewTargetSplitter(1000000) // 用大值获取总目标数
 	targetCount := splitter.GetTargetCount(target)
 
-	// 获取启用的模块数
-	enabledModules := b.countEnabledModules(taskConfig)
+	// 获取启用的模块数（用于 batch 分配；为避免除零，最小取 1）
+	enabledModules := utils.CountEnabledModules(taskConfig)
+	if enabledModules == 0 {
+		enabledModules = 1
+	}
 
 	// 最佳子任务总数范围：10~30
 	// 太少 → 单批次过大 → POC扫描超时
