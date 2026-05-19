@@ -234,11 +234,11 @@ func createAndPushCronTask(ctx context.Context, svcCtx *svc.ServiceContext, sche
 		batches = []string{msg.Target}
 	}
 
-	// subTaskCount = 批次数 × (启用模块数 + 1)，+1 为每批次最终完成递增
-	// worker 端每完成一个模块递增 1，进度 = done / total × 100
-	// 无任何模块启用时，worker 仅发 1 次最终增量，故 subTaskCount = batches
-	subTaskCount := len(batches) * (enabledModules + 1)
-	if enabledModules == 0 {
+	// subTaskCount = 批次数 × 启用模块数
+	// worker 端每完成一个模块递增 1（包括"完成"阶段），进度 = done / total × 100
+	// 无任何模块启用时，subTaskCount = 0，worker 不会调用 incrSubTaskDone
+	subTaskCount := len(batches) * enabledModules
+	if subTaskCount == 0 {
 		subTaskCount = len(batches)
 	}
 
@@ -353,6 +353,8 @@ func startOrphanedTaskRecovery(svcCtx *svc.ServiceContext) {
 		logic.RecoverOrphanedByHeartbeat(context.Background(), svcCtx)
 		// 兜底：通过 MongoDB update_time 阈值检测卡住的任务
 		logic.RecoverOrphanedTasks(context.Background(), svcCtx, orphanedTaskThreshold)
+		// MongoDB 兜底恢复：直接查询 STARTED 状态超过 30 分钟未更新的任务
+		logic.RecoverStaleMongoTasks(context.Background(), svcCtx, 30*time.Minute)
 		logic.CleanupStaleProcessingTasks(context.Background(), svcCtx, "")
 	}
 }

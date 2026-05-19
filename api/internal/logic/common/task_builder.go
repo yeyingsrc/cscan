@@ -63,12 +63,12 @@ func (b *TaskBuilder) BuildAndPushSubTasks(workspaceId string, task *model.MainT
 	}(timeoutCtx, cancel)
 
 	// 3. Calculate SubTask Count
-	// subTaskCount = 批次数 × (启用模块数 + 1)，+1 为每批次最终完成递增
-	// worker 端每完成一个模块递增 1，进度 = done / total × 100
-	// 无任何模块启用时，worker 仅发 1 次最终增量，故 subTaskCount = batches
+	// subTaskCount = 批次数 × 启用模块数
+	// worker 端每完成一个模块递增 1（包括"完成"阶段），进度 = done / total × 100
+	// 无任何模块启用时，subTaskCount = 0，worker 不会调用 incrSubTaskDone
 	enabledModules := utils.CountEnabledModules(taskConfig)
-	subTaskCount := len(batches) * (enabledModules + 1)
-	if enabledModules == 0 {
+	subTaskCount := len(batches) * enabledModules
+	if subTaskCount == 0 {
 		subTaskCount = len(batches)
 	}
 

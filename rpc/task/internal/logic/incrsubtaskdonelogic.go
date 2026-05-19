@@ -78,7 +78,7 @@ func (l *IncrSubTaskDoneLogic) IncrSubTaskDone(in *pb.IncrSubTaskDoneReq) (*pb.I
 	}
 
 	// 更新任务进度到恢复管理器
-	if err := l.svcCtx.TaskRecoveryManager.UpdateTaskProgress(in.TaskId, in.Phase, progress); err != nil {
+	if err := l.svcCtx.TaskRecoveryManager.UpdateTaskProgress(in.MainTaskId, in.Phase, progress); err != nil {
 		l.Logger.Errorf("IncrSubTaskDone: failed to update recovery progress: %v", err)
 	}
 
