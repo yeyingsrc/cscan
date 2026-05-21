@@ -31,6 +31,8 @@ var (
 	globalAllocCtx    context.Context
 	globalAllocCancel context.CancelFunc
 	globalAllocOnce   sync.Once
+	// chromedpSemaphore 限制 chromedp 并发数，避免 race condition 导致 close-of-closed-channel panic
+	chromedpSemaphore = make(chan struct{}, 3)
 )
 
 func getGlobalAllocator() (context.Context, context.CancelFunc) {
@@ -1128,8 +1130,24 @@ func (s *FingerprintScanner) getIconHash(baseUrl string) string {
 }
 
 // takeScreenshot 使用chromedp截图
-func (s *FingerprintScanner) takeScreenshot(ctx context.Context, targetUrl string) string {
+func (s *FingerprintScanner) takeScreenshot(ctx context.Context, targetUrl string) (result string) {
 	if ctx.Err() != nil {
+		return ""
+	}
+
+	// recover 防护：捕获 chromedp 内部 panic，防止 worker 崩溃
+	defer func() {
+		if r := recover(); r != nil {
+			logx.Errorf("takeScreenshot panic recovered for %s: %v", targetUrl, r)
+			result = ""
+		}
+	}()
+
+	// 使用 semaphore 限制 chromedp 并发数，避免 race condition 导致 close-of-closed-channel panic
+	select {
+	case chromedpSemaphore <- struct{}{}:
+		defer func() { <-chromedpSemaphore }()
+	case <-ctx.Done():
 		return ""
 	}
 
