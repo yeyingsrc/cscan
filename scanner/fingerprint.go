@@ -1130,12 +1130,18 @@ func (s *FingerprintScanner) getIconHash(baseUrl string) string {
 }
 
 // takeScreenshot 使用chromedp截图
+// 注意：不使用 context.WithTimeout 包裹 chromedp 调用。
+// chromedp v0.15.1 的 ExecAllocator.Allocate 存在竞态 bug：
+// 超时取消 context 会杀死 Chrome 进程，触发 cleanup goroutine 与 LostConnection handler 竞争
+// close(c.allocated)，导致 panic: close of closed channel。
+// 该 panic 发生在 chromedp 的 goroutine 中，recover() 无法捕获。
+// 因此改用 goroutine + timer 实现外部超时，不取消 chromedp context。
 func (s *FingerprintScanner) takeScreenshot(ctx context.Context, targetUrl string) (result string) {
 	if ctx.Err() != nil {
 		return ""
 	}
 
-	// recover 防护：捕获 chromedp 内部 panic，防止 worker 崩溃
+	// recover 防护：捕获当前 goroutine 的 panic
 	defer func() {
 		if r := recover(); r != nil {
 			logx.Errorf("takeScreenshot panic recovered for %s: %v", targetUrl, r)
@@ -1143,7 +1149,7 @@ func (s *FingerprintScanner) takeScreenshot(ctx context.Context, targetUrl strin
 		}
 	}()
 
-	// 使用 semaphore 限制 chromedp 并发数，避免 race condition 导致 close-of-closed-channel panic
+	// semaphore 限制并发数，避免资源耗尽
 	select {
 	case chromedpSemaphore <- struct{}{}:
 		defer func() { <-chromedpSemaphore }()
@@ -1151,14 +1157,11 @@ func (s *FingerprintScanner) takeScreenshot(ctx context.Context, targetUrl strin
 		return ""
 	}
 
-	// 使用全局持久化分配器，避免每次截图创建/销毁 Chrome 进程
-	// 分配器基于 context.Background()，不会因父 context 取消而触发 chromedp 的 close-of-closed-channel panic
 	allocCtx, _ := getGlobalAllocator()
 
-	screenshotCtx, cancel := context.WithTimeout(allocCtx, 45*time.Second)
-	defer cancel()
-
-	taskCtx, taskCancel := chromedp.NewContext(screenshotCtx,
+	// 不使用 context.WithTimeout，让 Chrome 自然退出
+	// 使用 Background 派生，确保 chromedp context 不会被外部取消
+	taskCtx, taskCancel := chromedp.NewContext(allocCtx,
 		chromedp.WithErrorf(func(format string, args ...interface{}) {
 			msg := fmt.Sprintf(format, args...)
 			if !strings.Contains(msg, "CookiePartitionKey") {
@@ -1166,48 +1169,73 @@ func (s *FingerprintScanner) takeScreenshot(ctx context.Context, targetUrl strin
 			}
 		}),
 	)
-	defer taskCancel()
 
-	var buf []byte
-	var pageHeight int64
+	// 用 goroutine + timer 实现超时检测，不取消 chromedp context
+	type screenshotResult struct {
+		data string
+		err  error
+	}
+	ch := make(chan screenshotResult, 1)
 
-	err := chromedp.Run(taskCtx,
-		chromedp.Navigate(targetUrl),
-		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			time.Sleep(3 * time.Second)
-			return nil
-		}),
-		chromedp.Evaluate(`document.body.scrollHeight`, &pageHeight),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			if pageHeight < 1080 {
-				pageHeight = 1080
-			}
-			return chromedp.EmulateViewport(1920, pageHeight).Do(ctx)
-		}),
-		chromedp.Evaluate(`window.scrollTo(0, 0)`, nil),
-		chromedp.Sleep(2*time.Second),
-		chromedp.FullScreenshot(&buf, 90),
-	)
+	go func() {
+		defer taskCancel()
 
-	if err != nil {
-		logx.Errorf("Screenshot failed for %s: %v", targetUrl, err)
-		err = chromedp.Run(taskCtx,
+		var buf []byte
+		var pageHeight int64
+
+		err := chromedp.Run(taskCtx,
 			chromedp.Navigate(targetUrl),
-			chromedp.Sleep(5*time.Second),
-			chromedp.CaptureScreenshot(&buf),
+			chromedp.WaitReady("body", chromedp.ByQuery),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				time.Sleep(3 * time.Second)
+				return nil
+			}),
+			chromedp.Evaluate(`document.body.scrollHeight`, &pageHeight),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				if pageHeight < 1080 {
+					pageHeight = 1080
+				}
+				return chromedp.EmulateViewport(1920, pageHeight).Do(ctx)
+			}),
+			chromedp.Evaluate(`window.scrollTo(0, 0)`, nil),
+			chromedp.Sleep(2*time.Second),
+			chromedp.FullScreenshot(&buf, 90),
 		)
+
 		if err != nil {
-			logx.Errorf("Fallback screenshot also failed for %s: %v", targetUrl, err)
+			ch <- screenshotResult{"", err}
+			return
+		}
+
+		if len(buf) > 0 {
+			ch <- screenshotResult{base64.StdEncoding.EncodeToString(buf), nil}
+		} else {
+			ch <- screenshotResult{"", nil}
+		}
+	}()
+
+	// 等待截图完成或超时
+	timer := time.NewTimer(60 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			logx.Errorf("Screenshot failed for %s: %v", targetUrl, r.err)
 			return ""
 		}
+		if r.data != "" {
+			logx.Infof("完成使用chromedp截图: %s", targetUrl)
+		}
+		return r.data
+	case <-timer.C:
+		logx.Errorf("Screenshot timeout for %s (60s), abandoning", targetUrl)
+		// 不取消 taskCtx，让 Chrome 自然退出，避免触发 chromedp 的 close-of-closed-channel panic
+		return ""
+	case <-ctx.Done():
+		// 父 context 取消（任务停止），不取消 chromedp context
+		return ""
 	}
-
-	logx.Infof("完成使用chromedp截图: %s", targetUrl)
-	if len(buf) > 0 {
-		return base64.StdEncoding.EncodeToString(buf)
-	}
-	return ""
 }
 
 // extractTitle 提取网页标题
