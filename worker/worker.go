@@ -89,6 +89,12 @@ type Worker struct {
 
 	// 任务执行器集成
 	taskRunnerIntegration *TaskRunnerIntegration
+
+	// 本地结果队列（API 不可用时持久化任务结果）
+	resultQueue *ResultQueue
+
+	// 活跃任务的日志记录器（维持 buffer 生命周期）
+	taskLoggers sync.Map // mainTaskId -> *TaskLoggerWS
 }
 
 // getMainTaskId 从 taskId 中提取主任务ID
@@ -116,17 +122,20 @@ func getMainTaskId(taskId string) string {
 // taskLog 发布任务级别日志
 // 子任务的日志会同时写入主任务的日志流，方便统一查看
 func (w *Worker) taskLog(taskId, level, format string, args ...interface{}) {
-	// 获取主任务ID，确保子任务日志也能在主任务中查看
 	mainTaskId := getMainTaskId(taskId)
 
-	// 如果是子任务，在日志消息前加上子任务标识
 	if mainTaskId != taskId {
 		subIndex := taskId[len(mainTaskId)+1:]
 		format = fmt.Sprintf("[Sub-%s] %s", subIndex, format)
 	}
 
-	// 使用 WebSocket 日志记录器，将日志发送到服务器
-	logger := NewTaskLoggerWS(w.config.Name, mainTaskId, w.wsClient)
+	// 从 map 获取持久化的 logger 实例，仅在首次时创建
+	val, ok := w.taskLoggers.Load(mainTaskId)
+	if !ok {
+		newLogger := NewTaskLoggerWS(w.config.Name, mainTaskId, w.wsClient)
+		val, _ = w.taskLoggers.LoadOrStore(mainTaskId, newLogger)
+	}
+	logger := val.(*TaskLoggerWS)
 
 	switch level {
 	case LevelError:
@@ -137,6 +146,15 @@ func (w *Worker) taskLog(taskId, level, format string, args ...interface{}) {
 		logger.Debug(format, args...)
 	default:
 		logger.Info(format, args...)
+	}
+}
+
+// cleanupTaskLogger 清理任务日志记录器，flush 残余缓冲
+func (w *Worker) cleanupTaskLogger(taskId string) {
+	mainTaskId := getMainTaskId(taskId)
+	if val, loaded := w.taskLoggers.LoadAndDelete(mainTaskId); loaded {
+		logger := val.(*TaskLoggerWS)
+		logger.flushBuffer()
 	}
 }
 
@@ -327,6 +345,16 @@ func NewWorker(config WorkerConfig) (*Worker, error) {
 	// 加载HTTP服务映射配置
 	w.loadHttpServiceMappings()
 
+	// 创建本地结果队列
+	resultQueueDir := filepath.Join("data", "result_queue")
+	w.resultQueue = NewResultQueue(resultQueueDir, 200, func(ctx context.Context, req *TaskResultReq) error {
+		_, err := w.httpClient.SaveTaskResult(ctx, req)
+		return err
+	})
+	w.resultQueue.SetLogger(func(level, format string, args ...interface{}) {
+		w.logger.Info("[ResultQueue] "+format, args...)
+	})
+
 	return w, nil
 }
 
@@ -498,6 +526,13 @@ func (w *Worker) Start() {
 		w.adaptiveScheduler.Start()
 	}
 
+	// 启动本地结果队列
+	if w.resultQueue != nil {
+		if err := w.resultQueue.Start(w.ctx); err != nil {
+			w.logger.Warn("Result queue failed to start: %v", err)
+		}
+	}
+
 	// 启动 WebSocket 客户端（用于日志推送和控制信号）
 	go func() {
 		defer func() {
@@ -592,6 +627,7 @@ func (w *Worker) processTaskLoop() {
 			ctx := context.Background()
 			if ctrl := w.checkTaskControl(ctx, task.TaskId); ctrl == "STOP" {
 				w.taskLog(task.TaskId, LevelInfo, "Task %s skipped because it was stopped while waiting in queue", task.TaskId)
+				w.cleanupTaskLogger(task.TaskId)
 				// 队列内被丢弃时一次性发出本批次应有的全部增量，避免 sub_task_done 永远到不了 sub_task_count
 				w.incrSubTaskDone(ctx, task, "完成", true, w.expectedTaskIncr(task.Config))
 				continue
@@ -842,6 +878,11 @@ func (w *Worker) Stop() {
 		w.adaptiveScheduler.Stop()
 	}
 
+	// 停止本地结果队列
+	if w.resultQueue != nil {
+		w.resultQueue.Stop()
+	}
+
 	// 通知服务器Worker即将离线，删除Redis状态数据
 	w.notifyOffline()
 
@@ -1019,8 +1060,8 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 	// 添加 panic 恢复机制，防止单个任务的 panic 导致整个 Worker 挂掉
 	defer func() {
 		if r := recover(); r != nil {
-			w.taskLog(task.TaskId, LevelError, "Task execution panic recovered: %v, stack: %s", r, string(getStackTrace()))
-			// 更新任务状态为失败
+			// 使用 Worker 级别 logger，避免在 cleanupTaskLogger 之后创建孤儿 task logger
+			w.logger.Error("[Task:%s] Task execution panic recovered: %v, stack: %s", task.TaskId, r, string(getStackTrace()))
 			ctx := context.Background()
 			w.updateTaskStatus(ctx, task.TaskId, scheduler.TaskStatusFailure, fmt.Sprintf("Task panic: %v", r))
 		}
@@ -1065,6 +1106,9 @@ func (w *Worker) executeTask(task *scheduler.TaskInfo) {
 
 		// 清除控制信号
 		w.ClearTaskControlSignal(task.TaskId)
+
+		// 清理任务日志记录器，flush 残余缓冲
+		w.cleanupTaskLogger(task.TaskId)
 
 		// 释放资源槽位（优先使用自适应调度器）
 		if w.adaptiveScheduler != nil {
@@ -2730,8 +2774,25 @@ func (w *Worker) saveAssetResult(ctx context.Context, workspaceId, mainTaskId, o
 		}
 
 		if err != nil {
-			w.taskLog(mainTaskId, LevelError, "Batch %d/%d save failed after %d attempts: %v",
-				batchIdx+1, totalBatches, maxBatchRetry, err)
+			// API 不可用时，将结果入队到本地队列
+			if w.resultQueue != nil {
+				queueReq := &TaskResultReq{
+					WorkspaceId: workspaceId,
+					MainTaskId:  mainTaskId,
+					Assets:      httpAssets,
+					OrgId:       orgId,
+				}
+				if queueErr := w.resultQueue.Enqueue(queueReq); queueErr != nil {
+					w.taskLog(mainTaskId, LevelError, "Batch %d/%d save failed and queue failed: %v (queue error: %v)",
+						batchIdx+1, totalBatches, maxBatchRetry, err, queueErr)
+				} else {
+					w.taskLog(mainTaskId, LevelWarn, "Batch %d/%d save failed after %d attempts, queued for retry: %v",
+						batchIdx+1, totalBatches, maxBatchRetry, err)
+				}
+			} else {
+				w.taskLog(mainTaskId, LevelError, "Batch %d/%d save failed after %d attempts: %v",
+					batchIdx+1, totalBatches, maxBatchRetry, err)
+			}
 		} else {
 			totalNew += resp.NewAsset
 			totalUpdate += resp.UpdateAsset
@@ -2821,30 +2882,38 @@ func (w *Worker) keepAliveLoop() {
 	// 启动时立即发送一次心跳
 	w.sendHeartbeat()
 
-	// 心跳间隔 30 秒，但允许 3 次失败（服务端应设置 90-120 秒超时判定离线）
-	ticker := time.NewTicker(30 * time.Second)
+	const (
+		normalInterval  = 30 * time.Second  // 正常心跳间隔
+		circuitInterval = 60 * time.Second  // 熔断期间心跳间隔
+		circuitThreshold = 5                // 连续失败多少次进入熔断
+	)
+
+	ticker := time.NewTicker(normalInterval)
 	defer ticker.Stop()
 
 	consecutiveFailures := 0
-	maxFailures := 3
+	inCircuit := false
 
 	for {
 		select {
 		case <-w.stopChan:
 			return
 		case <-ticker.C:
-			// 心跳发送使用独立 context，不受主 context 影响
 			if err := w.sendHeartbeatWithRetry(); err != nil {
 				consecutiveFailures++
-				w.logger.Warn("Heartbeat failed (%d/%d): %v", consecutiveFailures, maxFailures, err)
 
-				if consecutiveFailures >= maxFailures {
-					w.logger.Warn("Heartbeat failed %d times consecutively, worker may be marked offline", maxFailures)
-					// 不主动退出，继续尝试，让服务端决定是否标记离线
+				// 进入熔断状态
+				if !inCircuit && consecutiveFailures >= circuitThreshold {
+					inCircuit = true
+					ticker.Reset(circuitInterval)
+					w.logger.Warn("Heartbeat circuit breaker OPEN after %d failures, interval increased to %v", consecutiveFailures, circuitInterval)
 				}
 			} else {
-				if consecutiveFailures > 0 {
-					w.logger.Info("Heartbeat recovered after %d failures", consecutiveFailures)
+				// 退出熔断状态
+				if inCircuit {
+					inCircuit = false
+					ticker.Reset(normalInterval)
+					w.logger.Info("Heartbeat circuit breaker CLOSED, recovered after %d failures", consecutiveFailures)
 				}
 				consecutiveFailures = 0
 			}

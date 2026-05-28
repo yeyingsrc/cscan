@@ -979,6 +979,31 @@ func (c *WorkerWSClient) SendLogImmediate(taskId, level, message string) error {
 	})
 }
 
+// SendLogBatch 批量发送日志
+func (c *WorkerWSClient) SendLogBatch(logs []WSLogPayload) error {
+	if !c.IsConnected() {
+		return fmt.Errorf("not connected")
+	}
+	if len(logs) == 0 {
+		return nil
+	}
+
+	if len(logs) == 1 {
+		payloadData, _ := json.Marshal(logs[0])
+		return c.sendMessage(&WSMessage{
+			Type:    WSTypeLog,
+			Payload: payloadData,
+		})
+	}
+
+	batchPayload := WSLogBatchPayload{Logs: logs}
+	payloadData, _ := json.Marshal(batchPayload)
+	return c.sendMessage(&WSMessage{
+		Type:    WSTypeLogBatch,
+		Payload: payloadData,
+	})
+}
+
 // flushLogs 刷新日志缓冲�?
 func (c *WorkerWSClient) flushLogs() {
 	c.logMu.Lock()

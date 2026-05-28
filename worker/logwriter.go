@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/zeromicro/go-zero/core/logx"
@@ -163,6 +164,11 @@ type TaskLoggerWS struct {
 	workerName string
 	taskId     string
 	wsClient   *WorkerWSClient
+
+	// 日志缓冲区（WebSocket 断连时暂存日志）
+	buffer   []WSLogPayload
+	bufferMu sync.Mutex
+	maxBuf   int // 缓冲区最大条数
 }
 
 // NewTaskLoggerWS 创建WebSocket任务日志记录器
@@ -171,6 +177,8 @@ func NewTaskLoggerWS(workerName, taskId string, wsClient *WorkerWSClient) *TaskL
 		workerName: workerName,
 		taskId:     taskId,
 		wsClient:   wsClient,
+		buffer:     make([]WSLogPayload, 0, 100),
+		maxBuf:     1000,
 	}
 }
 
@@ -182,21 +190,67 @@ func (l *TaskLoggerWS) log(level, format string, args ...interface{}) {
 	// 输出到控制台
 	logx.Infof("%s [%s] [%s] [Task:%s] %s", timestamp, level, l.workerName, l.taskId, msg)
 
-	// 调试：检查 wsClient 状态
 	if l.wsClient == nil {
-		logx.Info("[TaskLoggerWS] wsClient is nil!")
 		return
 	}
 
 	connected := l.wsClient.IsConnected()
 
-	// 通过WebSocket立即发送（不缓冲，确保日志及时到达）
 	if connected {
+		// 先 flush 缓冲区
+		l.flushBuffer()
+		// 发送当前日志
 		if err := l.wsClient.SendLogImmediate(l.taskId, level, msg); err != nil {
 			logx.Infof("[TaskLoggerWS] Failed to send log via WebSocket: %v", err)
 		}
 	} else {
-		logx.Info("[TaskLoggerWS] WebSocket not connected, log not sent to server")
+		// WebSocket 断连，写入缓冲区
+		l.bufferToQueue(level, msg)
+	}
+}
+
+// bufferToQueue 将日志写入缓冲区
+func (l *TaskLoggerWS) bufferToQueue(level, msg string) {
+	l.bufferMu.Lock()
+	defer l.bufferMu.Unlock()
+
+	// 超出上限时丢弃最旧日志
+	if len(l.buffer) >= l.maxBuf {
+		l.buffer = l.buffer[1:]
+	}
+
+	l.buffer = append(l.buffer, WSLogPayload{
+		TaskId:    l.taskId,
+		Level:     level,
+		Message:   msg,
+		Timestamp: time.Now().UnixMilli(),
+	})
+}
+
+// flushBuffer 将缓冲区日志发送到 WebSocket
+func (l *TaskLoggerWS) flushBuffer() {
+	l.bufferMu.Lock()
+	if len(l.buffer) == 0 {
+		l.bufferMu.Unlock()
+		return
+	}
+	logs := l.buffer
+	l.buffer = make([]WSLogPayload, 0, 100)
+	l.bufferMu.Unlock()
+
+	// 批量发送
+	if err := l.wsClient.SendLogBatch(logs); err != nil {
+		logx.Infof("[TaskLoggerWS] Failed to flush %d buffered logs: %v", len(logs), err)
+		// 发送失败，放回缓冲区（但不超出上限）
+		l.bufferMu.Lock()
+		remaining := l.maxBuf - len(l.buffer)
+		if remaining > 0 {
+			if len(logs) > remaining {
+				logs = logs[len(logs)-remaining:]
+			}
+			l.buffer = append(l.buffer, logs...)
+		}
+		l.bufferMu.Unlock()
 	}
 }
 
